@@ -1,0 +1,53 @@
+    def login(self):
+        """
+        Inicia sesión en el portal del SER.
+        Este método abrirá un navegador para que puedas resolver el CAPTCHA manualmente.
+        """
+        with sync_playwright() as p:
+            # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
+            browser = p.chromium.launch(headless=False)
+            page = browser.new_page()
+
+            print(f"Navegando a la página de login: {self.ser_url}Account/LogOn")
+            page.goto(f"{self.ser_url}Account/LogOn")
+
+            print("Llenando formulario de login...")
+
+            # --- LÍNEAS MODIFICADAS ---
+            # Usamos #username para seleccionar el elemento con id="username"
+            page.locator("#username").fill(self.ser_user)  # type: ignore
+            # Usamos #password para seleccionar el elemento con id="password"
+            page.locator("#password").fill(self.ser_password)  # type: ignore
+
+            try:
+                recaptcha_frame = page.frame_locator('iframe[title="reCAPTCHA"]')
+
+                # 2. Dentro de ese iframe, localizamos y hacemos clic en el div
+                checkbox = recaptcha_frame.locator(".recaptcha-checkbox-border")
+                checkbox.click()
+
+                print(
+                    "Clic en el checkbox de reCAPTCHA realizado. Esperando resultado..."
+                )
+                # Damos un par de segundos para ver si aparece un desafío
+                page.wait_for_timeout(3000)
+                print("Esperando a que inicies sesión...")
+                page.wait_for_url(
+                    self.ser_url, timeout=600000
+                )  # Espera a que la URL cambie a la página principal
+                print("¡Login exitoso detectado!")
+
+                print("¡Login exitoso detectado!")
+
+            except Exception as e:
+                print(
+                    f"No se detectó el inicio de sesión o la ventana se cerró. Error: {e}"
+                )
+
+            # Mantener la ventana abierta para inspección (opcional)
+            # input("Presiona Enter para cerrar el navegador...")
+            # Guarda las cookies y el estado del local storage en un archivo
+            page.context.storage_state(path="auth_state.json")
+
+            browser.close()
+            print("Navegador cerrado.")

@@ -1,0 +1,36 @@
+{
+  "cookies": [
+    {
+      "name": "_GRECAPTCHA",
+      "value": "09ANMylNBdCkRgpMdnB5qcc5z55K_BTxln_bsstRSA6skngW8UGWF0cjONfKeYj977eu3LZ47HfUlGzxXsaFGyTME",
+      "domain": "www.google.com",
+      "path": "/recaptcha",
+      "expires": 1771708988.819404,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ASP.NET_SessionId",
+      "value": "xudy1h55inzjej45bmsv0h45",
+      "domain": "ser.mintic.gov.co",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://www.google.com",
+      "localStorage": [
+        { "name": "rc::a", "value": "YzBnZWwxdWk1dzF5" },
+        {
+          "name": "rc::f",
+          "value": "0aAJ3Gg0Z69QMKL1ENz7cSmVDgAXm1mVyXMvhbDnyY7G0sCDFQj8Ek9izgUl4qR0tWtOl6h9A"
+        }
+      ]
+    }
+  ]
+}
