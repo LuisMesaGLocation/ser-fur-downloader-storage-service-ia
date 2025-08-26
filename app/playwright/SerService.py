@@ -49,7 +49,7 @@ class SerService:
         # Cambia a headless=False si quieres ver el navegador mientras depuras
         self.browser = self.playwright.chromium.launch(headless=False)
 
-        context = self.browser.new_context()
+        context = self.browser.new_context(viewport={"width": 1920, "height": 1080})
 
         # Inyectamos la cookie de autenticación
         context.add_cookies(
