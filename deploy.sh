@@ -4,12 +4,12 @@
 set -e
 
 clear
-gcloud config set project emuclient
+gcloud config set project mintic-models-dev
 
 # --- Configuración ---
 # Define el nombre completo de la imagen y la etiqueta (tag).
-IMAGE_NAME="us-central1-docker.pkg.dev/emuclient/cloud-run-source-deploy/mcp-server-bigquery-example:latest"
-SERVICE_NAME="mcp-server-bigquery-example"
+IMAGE_NAME="us-central1-docker.pkg.dev/mintic-models-dev/cloud-run-source-deploy/ser-furs-downloader-storage-service:latest"
+SERVICE_NAME="ser-furs-downloader-storage-service"
 
 # --- Lógica del Script ---
 echo "Verificando si la imagen '$IMAGE_NAME' ya existe..."

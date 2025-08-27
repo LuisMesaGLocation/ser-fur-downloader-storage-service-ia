@@ -77,7 +77,7 @@ class BigQueryRepository:
         QUALIFY ROW_NUMBER() OVER (
             PARTITION BY VW_E_BDU.Identificacion, VW_E_BDU.Expediente
             ORDER BY CAST(VW_E_BDU.FECHA_EJECUCION AS TIMESTAMP) DESC
-            ) = 1 ORDER BY nitOperador ASC;
+            ) = 1 ORDER BY nitOperador ASC, expediente ASC;
         """
 
         try:

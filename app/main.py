@@ -1,7 +1,9 @@
+import os
+import shutil
 from datetime import datetime
 from typing import List
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
@@ -34,8 +36,36 @@ def obtener_fures(request: FuresRequest):
     desde BigQuery, procesados para obtener la última ingesta por
     operador y periodo.
     """
-
+    download_folder = ser_service.download_path
+    if os.path.exists(download_folder):
+        print(f"Limpiando directorio de descargas principal: {download_folder}")
+        shutil.rmtree(download_folder)
     datos_sanciones = repo.obtenerExpedientes()
+    sanciones_a_procesar = datos_sanciones
+    total_registros = len(datos_sanciones)
+    if request.nitDesde is not None and request.nitHasta is not None:
+        print(
+            f"Filtrando registros por VALOR de NIT en el rango: desde {request.nitDesde} hasta {request.nitHasta}."
+        )
+
+        # Validamos que el rango sea lógico
+        if request.nitHasta < request.nitDesde:
+            raise HTTPException(
+                status_code=400,
+                detail="Rango inválido: nitHasta no puede ser menor que nitDesde.",
+            )
+
+        # Filtramos la lista para quedarnos solo con los NITs en el rango especificado
+        sanciones_a_procesar = [
+            sancion
+            for sancion in datos_sanciones
+            if request.nitDesde <= int(sancion.nitOperador) <= request.nitHasta
+        ]
+
+        print(
+            f"Se encontraron {len(sanciones_a_procesar)} registros de un total de {total_registros} para procesar en el rango."
+        )
+
     ser_service.start_session(token_ser=request.token_ser)
     year = datetime.now().year
     if request.year:
@@ -50,7 +80,7 @@ def obtener_fures(request: FuresRequest):
     print(f"Procesando {len(datos_sanciones)} registros en el SER...")
 
     # 5. Bucle anidado: Itera sobre cada registro de SANCIONES
-    for sancion in datos_sanciones:
+    for sancion in sanciones_a_procesar:
         # ASUNCIÓN: El objeto 'sancion' tiene un atributo 'nitOperador'.
         # Si el nombre del campo es diferente (ej: sancion.nit), ajústalo aquí.
         nit = str(sancion.nitOperador)
@@ -85,4 +115,4 @@ def obtener_fures(request: FuresRequest):
     ser_service.close_session()
 
     # 7. Devuelve los datos de FURES originales, cumpliendo con el response_model
-    return datos_fures_para_respuesta  # type: ignore
+    return sanciones_a_procesar  # type: ignore

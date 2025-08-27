@@ -1,2 +1,4 @@
 .venv/
 /descargas/
+# Byted-code compilado de Python
+__pycache__/

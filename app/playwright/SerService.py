@@ -52,7 +52,7 @@ class SerService:
         print("Iniciando sesión en el SER...")
         self.playwright = sync_playwright().start()
         # Cambia a headless=False si quieres ver el navegador mientras depuras
-        self.browser = self.playwright.chromium.launch(headless=True)
+        self.browser = self.playwright.chromium.launch(headless=False)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
@@ -142,7 +142,6 @@ class SerService:
         base_path = self.download_path
         quarter_folder = f"{trimestre}T"
         download_path = os.path.join(base_path, str(anio), nit, quarter_folder)
-        os.makedirs(download_path, exist_ok=True)
 
         try:
             rows = self.page.locator("table.scrollBarProcesada tbody tr")
