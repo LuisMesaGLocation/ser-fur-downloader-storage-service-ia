@@ -67,8 +67,8 @@ def obtener_fures(request: FuresRequest):
                 f"  -> Buscando en trimestre: {fecha_inicial_ajustada.strftime('%d/%m/%Y')} a {fecha_final_ajustada.strftime('%d/%m/%Y')}"
             )
 
-            nit = "900014381"
-            expediente = "96002150"
+            # nit = "900014381"
+            # expediente = "96002150"
 
             ser_service.buscar_data(
                 nitOperador=nit,

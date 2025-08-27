@@ -20,6 +20,7 @@ greenlet==3.2.4
 grpcio==1.74.0
 grpcio-status==1.74.0
 h11==0.16.0
+holidays==0.79
 httpcore==1.0.9
 httptools==0.6.4
 httpx==0.28.1
@@ -33,6 +34,7 @@ mdurl==0.1.2
 orjson==3.11.2
 packaging==25.0
 playwright==1.54.0
+playwright-stealth==2.0.0
 pluggy==1.6.0
 proto-plus==1.26.1
 protobuf==6.32.0

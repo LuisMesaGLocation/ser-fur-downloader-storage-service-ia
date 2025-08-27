@@ -22,6 +22,7 @@ class SerService:
         self.ser_url = os.getenv("SER_URL")
         self.ser_auth_cookie = os.getenv("SER_AUTH_COOKIE")
         self.ser_url_consumo_fur = os.getenv("SER_URL_CONSUL_FUR")
+        self.download_path = os.getenv("DOWNLOAD_PATH", "descargas")
 
         if not self.ser_url or not self.ser_auth_cookie:
             raise ValueError(
@@ -51,7 +52,7 @@ class SerService:
         print("Iniciando sesión en el SER...")
         self.playwright = sync_playwright().start()
         # Cambia a headless=False si quieres ver el navegador mientras depuras
-        self.browser = self.playwright.chromium.launch(headless=False)
+        self.browser = self.playwright.chromium.launch(headless=True)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
@@ -131,15 +132,15 @@ class SerService:
 
     def descargar_pdfs_de_tabla(self, nit: str, anio: int, trimestre: int):
         """
-        Busca en la tabla los iconos de PDF, hace clic en ellos y guarda la descarga.
+        Busca en la tabla los iconos de PDF, hace clic en ellos y guarda la descarga con su nombre original.
         """
         if not self.page:
             print("Error: La página no está disponible.")
             return
 
         print(f"--- Iniciando descarga de PDFs para NIT {nit}, {anio}-Q{trimestre} ---")
-        base_path = "descargas"
-        quarter_folder = f"Q{trimestre}"
+        base_path = self.download_path
+        quarter_folder = f"{trimestre}T"
         download_path = os.path.join(base_path, str(anio), nit, quarter_folder)
         os.makedirs(download_path, exist_ok=True)
 
@@ -161,25 +162,42 @@ class SerService:
                         f"  -> Haciendo clic para descargar el PDF de la fila {i + 1}..."
                     )
 
-                    # --- INICIO DE LA LÓGICA BÁSICA ---
-                    # 1. Preparamos la escucha del evento de descarga ANTES de hacer clic
+                    # --- LÓGICA ORIGINAL RESTAURADA ---
                     with self.page.expect_download(timeout=60000) as download_info:
-                        # 2. Hacemos clic en el icono para iniciar la descarga
                         pdf_icon.click()
 
-                    # 3. Esperamos a que la descarga se complete
                     download = download_info.value
+
+                    # Opcional: Verificar si la descarga falló
+                    failure_reason = download.failure()
+                    if failure_reason:
+                        print(f"  -> ERROR: La descarga falló. Razón: {failure_reason}")
+                        continue
+
+                    # Usamos el nombre de archivo sugerido por el servidor
                     file_name = download.suggested_filename
                     save_path = os.path.join(download_path, file_name)
 
-                    # 4. Guardamos el archivo
                     download.save_as(save_path)
                     print(f"  -> ¡Éxito! Guardado en: {save_path}")
-                    # --- FIN DE LA LÓGICA BÁSICA ---
+
+                    # Pausa de 5 segundos después de cada descarga
+                    print("  -> Esperando 5 segundos antes de la siguiente descarga...")
+                    self.page.wait_for_timeout(5000)
+                    # --- FIN DE LA LÓGICA RESTAURADA ---
 
         except Exception as e:
             print(f"Ocurrió un error al procesar las descargas para NIT {nit}: {e}")
-            self.page.screenshot(path=f"error_descarga_{nit}_{trimestre}.png")
+            if self.page and not self.page.is_closed():
+                # --- INICIO DE LA MODIFICACIÓN ---
+                # Construimos la ruta para la captura DENTRO de la carpeta de descarga
+                screenshot_path = os.path.join(
+                    download_path, f"error_descarga_{nit}_{trimestre}.png"
+                )
+                self.page.screenshot(path=screenshot_path)
+                print(
+                    f"  -> ¡Error! Se guardó una captura de pantalla en: {screenshot_path}"
+                )
 
     def close_session(self):
         """
