@@ -1,18 +1,24 @@
 from dataclasses import dataclass
-from datetime import datetime
 
 # PASO 1: Asegúrate de que `cast` está importado desde `typing`
-from typing import List, cast
+from typing import List
 
 from google.cloud import bigquery
 from google.cloud.exceptions import GoogleCloudError
 
 
 @dataclass
-class FuresRecord:
+class Sancion:
+    yearVigencia: int
     nitOperador: int
-    periodo_fechaInicial: datetime
-    periodo_fechaFinal: datetime
+    expediente: int
+    trimestre: int
+
+
+@dataclass
+class Expediente:
+    nitOperador: int
+    expediente: int
 
 
 class BigQueryRepository:
@@ -25,23 +31,14 @@ class BigQueryRepository:
         """Inicializa el cliente de BigQuery."""
         self.bigquery_client = bigquery.Client()
 
-    def obtenerFurer(self) -> List[FuresRecord]:
-        """
-        Obtiene los 10 registros más recientes de FURES por operador y periodo.
-        """
+    def obtenerSanciones(self) -> List[Sancion]:
         query_sql = """
-            SELECT
-                FURES.nitOperador,
-                TIMESTAMP(FURES.periodo_fechaInicial) AS periodo_fechaInicial,
-                TIMESTAMP(FURES.periodo_fechaFinal) AS periodo_fechaFinal
-            FROM
-                `mintic-models-dev`.contraprestaciones_pro.SER_ConsultarFuresOperador AS FURES
-            QUALIFY
-                ROW_NUMBER() OVER (
-                    PARTITION BY FURES.nitOperador, FURES.periodo_fechaInicial, FURES.periodo_fechaFinal
-                    ORDER BY FURES.ingestion_timestamp DESC
-                ) = 1
-            LIMIT 1;
+        SELECT DISTINCT Sanciones.ANO_VIGENCIA                                      AS yearVigencia,
+                        Sanciones.NIT                                               AS nitOperador,
+                        Sanciones.EXPEDIENTE                                        AS expediente,
+                        CAST(REPLACE(LOWER(Sanciones.TRIMESTRE), 't', '') AS INT64) AS trimestre
+        FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.SANCIONES_DIVIC_PRO AS Sanciones
+        WHERE Sanciones.CANCELADOS = 'NO';
         """
 
         try:
@@ -49,10 +46,48 @@ class BigQueryRepository:
             query_job = self.bigquery_client.query(query_sql)
 
             results = [
-                FuresRecord(
+                Sancion(
+                    yearVigencia=int(row.yearVigencia),  # type: ignore
                     nitOperador=int(row.nitOperador),  # type: ignore
-                    periodo_fechaInicial=cast(datetime, row.periodo_fechaInicial),  # type: ignore
-                    periodo_fechaFinal=cast(datetime, row.periodo_fechaFinal),  # type: ignore
+                    expediente=row.expediente,  # type: ignore
+                    trimestre=int(row.trimestre),  # type: ignore
+                )
+                for row in query_job.result()  # type: ignore
+            ]
+
+            print(f"Consulta finalizada. Se obtuvieron {len(results)} registros.")
+            return results
+
+        except GoogleCloudError as e:
+            print(f"Error al ejecutar la consulta en BigQuery: {e}")
+            return []
+
+    def obtenerExpedientes(self) -> List[Expediente]:
+        query_sql = """
+        SELECT VW_E_BDU.Identificacion AS nitOperador,
+               VW_E_BDU.Expediente     AS expediente,
+        FROM `mintic-models-dev`.contraprestaciones_pro.VW_EXPEDIENTES_BDU AS VW_E_BDU
+                 INNER JOIN
+             `mintic-models-dev`.contraprestaciones_pro.rues_nit AS RUES
+             ON SAFE_CAST(VW_E_BDU.Identificacion AS INT64) = SAFE_CAST(RUES.numIdTributaria AS INT64)
+                 LEFT JOIN
+             UNNEST(RUES.informacionRepresentanteLegalPrincipal) AS rep_legal_principal
+        WHERE TRIM(VW_E_BDU.`Tipo Identificacion`) = 'NIT'
+          AND RUES.nomEstadoMatricula != 'CANCELADA'
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY VW_E_BDU.Identificacion, VW_E_BDU.Expediente
+            ORDER BY CAST(VW_E_BDU.FECHA_EJECUCION AS TIMESTAMP) DESC
+            ) = 1;
+        """
+
+        try:
+            print("Ejecutando consulta para obtener datos de FURES...")
+            query_job = self.bigquery_client.query(query_sql)
+
+            results = [
+                Expediente(
+                    nitOperador=int(row.nitOperador),  # type: ignore
+                    expediente=row.expediente,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]

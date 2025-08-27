@@ -4,7 +4,9 @@ FROM python:3.12-slim
 # 2. Establecer el directorio de trabajo
 WORKDIR /apphome
 
+
 COPY app app
+COPY .env .env
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
