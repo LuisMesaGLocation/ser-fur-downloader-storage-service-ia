@@ -1,5 +1,10 @@
 from pydantic import BaseModel
-from typing_extensions import Optional
+from typing_extensions import List, Optional
+
+
+class FuresDataItem(BaseModel):
+    nitOperador: int
+    expediente: int
 
 
 class FuresRequest(BaseModel):
@@ -7,3 +12,5 @@ class FuresRequest(BaseModel):
     year: Optional[int]
     nitDesde: Optional[int]
     nitHasta: Optional[int]
+    seccion: str
+    data: Optional[List[FuresDataItem]]

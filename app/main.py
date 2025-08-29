@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
 from app.repository.BigQueryRepository import BigQueryRepository, Expediente
+from app.repository.StorageRepository import StorageRepository
 from app.utils.fecha_habil_colombia import get_next_business_day
 
 app = FastAPI(
@@ -17,6 +18,7 @@ app = FastAPI(
 )
 repo = BigQueryRepository()
 ser_service = SerService()
+storageRepository = StorageRepository()
 
 
 @app.get("/hola")
@@ -80,6 +82,7 @@ def obtener_fures(request: FuresRequest):
     print(f"Procesando {len(datos_sanciones)} registros en el SER...")
 
     # 5. Bucle anidado: Itera sobre cada registro de SANCIONES
+    print(f"SANCIONES A PROCESAR ES: {sanciones_a_procesar}")
     for sancion in sanciones_a_procesar:
         # ASUNCIÓN: El objeto 'sancion' tiene un atributo 'nitOperador'.
         # Si el nombre del campo es diferente (ej: sancion.nit), ajústalo aquí.
@@ -97,8 +100,8 @@ def obtener_fures(request: FuresRequest):
                 f"  -> Buscando en trimestre: {fecha_inicial_ajustada.strftime('%d/%m/%Y')} a {fecha_final_ajustada.strftime('%d/%m/%Y')}"
             )
 
-            # nit = "900014381"
-            # expediente = "96002150"
+            nit = "900014381"
+            expediente = "96002150"
 
             ser_service.buscar_data(
                 nitOperador=nit,
@@ -108,11 +111,14 @@ def obtener_fures(request: FuresRequest):
             )
             # ¡NUEVA LÍNEA! Llamamos al método de descarga después de la búsqueda
             ser_service.descargar_pdfs_de_tabla(
-                nit=nit, anio=year, trimestre=trimestre_num
+                nit=nit, anio=year, trimestre=trimestre_num, expediente=int(expediente)
             )
 
     # 6. Cierra la sesión de Playwright DESPUÉS de terminar todos los bucles
     ser_service.close_session()
+
+    download_folder = os.getenv("DOWNLOAD_PATH", "/descargas")
+    storageRepository.upload_directory(download_folder)
 
     # 7. Devuelve los datos de FURES originales, cumpliendo con el response_model
     return sanciones_a_procesar  # type: ignore

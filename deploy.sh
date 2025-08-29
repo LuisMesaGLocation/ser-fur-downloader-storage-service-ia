@@ -38,7 +38,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --region us-central1 \
   --allow-unauthenticated \
   --cpu 1 \
-  --memory 500Mi \
-  --timeout 100
+  --memory 2048Mi \
+  --timeout 3600
 
 echo "¡Script completado! El servicio ha sido desplegado exitosamente."
