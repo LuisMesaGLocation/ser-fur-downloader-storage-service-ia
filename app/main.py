@@ -3,7 +3,8 @@ import shutil
 from datetime import datetime
 from typing import List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from typing_extensions import Optional
 
 from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
@@ -32,7 +33,13 @@ def read_root():
     summary="Obtener los últimos 10 registros de FURES",
     tags=["FURES"],
 )
-def obtener_fures(request: FuresRequest):
+def obtener_fures(
+    request: FuresRequest,
+    originData: Optional[str] = Query(
+        None,
+        description="Origen de los datos: 'database' para BigQuery, otro valor o None para usar datos del body",
+    ),
+):
     """
     Endpoint para obtener los 10 registros más recientes de FURES
     desde BigQuery, procesados para obtener la última ingesta por
@@ -42,33 +49,55 @@ def obtener_fures(request: FuresRequest):
     if os.path.exists(download_folder):
         print(f"Limpiando directorio de descargas principal: {download_folder}")
         shutil.rmtree(download_folder)
-    datos_sanciones = repo.obtenerExpedientes()
-    sanciones_a_procesar = datos_sanciones
-    total_registros = len(datos_sanciones)
-    if request.nitDesde is not None and request.nitHasta is not None:
-        print(
-            f"Filtrando registros por VALOR de NIT en el rango: desde {request.nitDesde} hasta {request.nitHasta}."
-        )
 
-        # Validamos que el rango sea lógico
-        if request.nitHasta < request.nitDesde:
-            raise HTTPException(
-                status_code=400,
-                detail="Rango inválido: nitHasta no puede ser menor que nitDesde.",
+    datos_expedientes: List[Expediente]
+    if originData == "database":
+        print("📊 Obteniendo datos desde BigQuery...")
+        datos_expedientes = repo.obtenerExpedientes()
+        expedientes_a_procesar = datos_expedientes
+        total_registros = len(datos_expedientes)
+
+        # Aplicar filtros de NIT si se proporcionan
+        if request.nitDesde is not None and request.nitHasta is not None:
+            print(
+                f"🔍 Filtrando registros por NIT en el rango: desde {request.nitDesde} hasta {request.nitHasta}"
             )
 
-        # Filtramos la lista para quedarnos solo con los NITs en el rango especificado
-        sanciones_a_procesar = [
-            sancion
-            for sancion in datos_sanciones
-            if request.nitDesde <= int(sancion.nitOperador) <= request.nitHasta
-        ]
+            if request.nitHasta < request.nitDesde:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Rango inválido: nitHasta no puede ser menor que nitDesde.",
+                )
 
+            expedientes_a_procesar = [
+                exp
+                for exp in datos_expedientes
+                if request.nitDesde <= int(exp.nitOperador) <= request.nitHasta
+            ]
+
+            print(
+                f"✅ Se encontraron {len(expedientes_a_procesar)} registros de un total de {total_registros} para procesar en el rango."
+            )
+
+    else:
+        print("📄 Usando datos del body de la petición...")
+        if not request.data:
+            raise HTTPException(
+                status_code=400,
+                detail="Cuando no se usa 'originData=database', el campo 'data' es requerido en el body.",
+            )
+
+        # Convertir los datos del body a objetos Expediente para mantener consistencia
+        expedientes_a_procesar = [
+            Expediente(nitOperador=item.nitOperador, expediente=item.expediente)
+            for item in request.data
+        ]
         print(
-            f"Se encontraron {len(sanciones_a_procesar)} registros de un total de {total_registros} para procesar en el rango."
+            f"✅ Se procesarán {len(expedientes_a_procesar)} registros enviados en el body."
         )
 
-    ser_service.start_session(token_ser=request.token_ser)
+    # ser_service.start_session(token_ser=request.token_ser)
+    ser_service.login()
     year = datetime.now().year
     if request.year:
         year = request.year
@@ -78,12 +107,7 @@ def obtener_fures(request: FuresRequest):
         (datetime(year, 7, 1).date(), datetime(year, 9, 30).date()),
         (datetime(year, 10, 1).date(), datetime(year, 12, 31).date()),
     ]
-    # 3. Iteramos sobre los datos y usamos la sesión ya activa
-    print(f"Procesando {len(datos_sanciones)} registros en el SER...")
-
-    # 5. Bucle anidado: Itera sobre cada registro de SANCIONES
-    print(f"SANCIONES A PROCESAR ES: {sanciones_a_procesar}")
-    for sancion in sanciones_a_procesar:
+    for sancion in expedientes_a_procesar:
         # ASUNCIÓN: El objeto 'sancion' tiene un atributo 'nitOperador'.
         # Si el nombre del campo es diferente (ej: sancion.nit), ajústalo aquí.
         nit = str(sancion.nitOperador)
@@ -102,6 +126,8 @@ def obtener_fures(request: FuresRequest):
 
             nit = "900014381"
             expediente = "96002150"
+            # nit = "800139802"
+            # expediente = "96001400"
 
             ser_service.buscar_data(
                 nitOperador=nit,
@@ -111,7 +137,11 @@ def obtener_fures(request: FuresRequest):
             )
             # ¡NUEVA LÍNEA! Llamamos al método de descarga después de la búsqueda
             ser_service.descargar_pdfs_de_tabla(
-                nit=nit, anio=year, trimestre=trimestre_num, expediente=int(expediente)
+                nit=nit,
+                anio=year,
+                trimestre=trimestre_num,
+                expediente=int(expediente),
+                seecion=request.seccion,
             )
 
     # 6. Cierra la sesión de Playwright DESPUÉS de terminar todos los bucles
@@ -121,4 +151,4 @@ def obtener_fures(request: FuresRequest):
     storageRepository.upload_directory(download_folder)
 
     # 7. Devuelve los datos de FURES originales, cumpliendo con el response_model
-    return sanciones_a_procesar  # type: ignore
+    return expedientes_a_procesar  # type: ignore

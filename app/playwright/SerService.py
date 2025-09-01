@@ -20,6 +20,8 @@ class SerService:
         Inicializa el servicio y las variables de estado.
         """
         self.ser_url = os.getenv("SER_URL")
+        self.ser_user = os.getenv("SER_USER")
+        self.ser_password = os.getenv("SER_PASSWORD")
         self.ser_auth_cookie = os.getenv("SER_AUTH_COOKIE")
         self.ser_url_consumo_fur = os.getenv("SER_URL_CONSUL_FUR")
         self.download_path = os.getenv("DOWNLOAD_PATH", "descargas")
@@ -42,6 +44,53 @@ class SerService:
         self.playwright: Playwright | None = None
         self.browser: Browser | None = None
         self.page: Page | None = None
+
+    def login(self):
+        """
+        Inicia sesión en el portal del SER usando las credenciales.
+        Este método mantiene la sesión abierta para uso posterior.
+        """
+        print("Iniciando sesión en el SER con credenciales...")
+
+        # Iniciamos Playwright y mantenemos la sesión abierta
+        self.playwright = sync_playwright().start()
+        # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
+        self.browser = self.playwright.chromium.launch(headless=True)
+
+        context = self.browser.new_context(
+            viewport={"width": 1600, "height": 900}, accept_downloads=True
+        )
+
+        self.page = context.new_page()
+
+        print(f"Navegando a la página de login: {self.ser_url}Account/LogOn")
+        self.page.goto(f"{self.ser_url}Account/LogOn")
+
+        print("Llenando formulario de login...")
+
+        # Llenamos los campos de usuario y contraseña
+        self.page.locator("#username").fill(self.ser_user)  # type: ignore
+        self.page.locator("#password").fill(self.ser_password)  # type: ignore
+
+        # tiempo de espera
+        self.page.wait_for_timeout(2000)
+
+        print("Saltándose la validación del CAPTCHA...")
+        # Modificar la función ValidadCaptcha para que siempre retorne true
+        self.page.evaluate("window.ValidadCaptcha = function() { return true; };")
+
+        # Ahora hacemos clic en el botón de ingresar
+        print("Haciendo clic en el botón Ingresar...")
+        self.page.locator('a.jqDefaultActionButton:has-text("Ingresar")').click()
+
+        self.page.wait_for_timeout(500)
+
+        # Verificamos si el login fue exitoso
+        if "Account/LogOn" in self.page.url:
+            raise PermissionError("Las credenciales son inválidas o el login falló.")
+
+        print("¡Sesión iniciada con éxito!")
+        print(f"Título de la página: '{self.page.title()}'")
 
     def start_session(self, token_ser: str):
         """
@@ -131,7 +180,7 @@ class SerService:
             # ser-furs-downloader-storage-service/app/playwright/SerService.py
 
     def descargar_pdfs_de_tabla(
-        self, nit: str, anio: int, trimestre: int, expediente: int
+        self, nit: str, anio: int, trimestre: int, expediente: int, seecion: str
     ):
         """
         Busca en la tabla los iconos de PDF, hace clic en ellos y guarda la descarga con su nombre original.
@@ -142,7 +191,11 @@ class SerService:
 
         print(f"--- Iniciando descarga de PDFs para NIT {nit}, {anio}-Q{trimestre} ---")
         base_trimestre_path = os.path.join(
-            self.download_path, str(anio), f"{nit}-{expediente}", f"{trimestre}T"
+            self.download_path,
+            seecion,
+            str(anio),
+            f"{nit}-{expediente}",
+            f"{trimestre}T",
         )
         os.makedirs(base_trimestre_path, exist_ok=True)
 
@@ -174,10 +227,20 @@ class SerService:
                 # self.page.pause()
 
                 self.page.wait_for_timeout(3000)
-                screenshot_path = os.path.join(autoliquidacion_path, f"{nit}.png")
-                self.page.screenshot(path=screenshot_path, full_page=True)
+                # Imagen normal (autoliquidacion)
+                screenshot_name = f"{nit}-autoliquidaciones.png"
+                screenshot_path_autoliquidacion = os.path.join(
+                    autoliquidacion_path, screenshot_name
+                )
+                screenshot_path_periodo = os.path.join(
+                    base_trimestre_path, screenshot_name
+                )
+                self.page.screenshot(
+                    path=screenshot_path_autoliquidacion, full_page=True
+                )
+                self.page.screenshot(path=screenshot_path_periodo, full_page=True)
+
                 self.page.wait_for_timeout(3000)
-                print(f"  -> Captura guardada en: {screenshot_path}")
 
                 rows = self.page.locator("table.scrollBarProcesada tbody tr")
                 num_rows = rows.count()
@@ -215,6 +278,13 @@ class SerService:
                         save_path = os.path.join(autoliquidacion_path, file_name)
 
                         download.save_as(save_path)
+                        save_path_autoliquidacion = os.path.join(
+                            autoliquidacion_path, file_name
+                        )
+                        save_path_periodo = os.path.join(base_trimestre_path, file_name)
+
+                        download.save_as(save_path_autoliquidacion)
+                        download.save_as(save_path_periodo)
                         print(f"  -> ¡Éxito! Guardado en: {save_path}")
 
                         # --- FIN DE LA LÓGICA RESTAURADA ---
@@ -273,10 +343,21 @@ class SerService:
                 # self.page.pause()
 
                 self.page.wait_for_timeout(3000)
-                screenshot_path = os.path.join(obligacion_path, f"{nit}.png")
-                self.page.screenshot(path=screenshot_path, full_page=True)
+                # Imagen normal (obligacion)
+                screenshot_name = f"{nit}-obligaciones.png"
+                screenshot_path_obligacion = os.path.join(
+                    obligacion_path, screenshot_name
+                )
+                screenshot_path_periodo = os.path.join(
+                    base_trimestre_path, screenshot_name
+                )
+
+                print(f"  -> Captura guardada en: {screenshot_path_obligacion}")
+
+                self.page.screenshot(path=screenshot_path_obligacion, full_page=True)
+                self.page.screenshot(path=screenshot_path_periodo, full_page=True)
+
                 self.page.wait_for_timeout(3000)
-                print(f"  -> Captura guardada en: {screenshot_path}")
 
                 # SOLUCIÓN: Usamos un selector específico para la tabla de obligaciones.
                 rows_obligacion = self.page.locator(
@@ -310,6 +391,15 @@ class SerService:
                             obligacion_path, download.suggested_filename
                         )
                         download.save_as(save_path)
+                        save_path_obligacion = os.path.join(
+                            obligacion_path, download.suggested_filename
+                        )
+                        save_path_periodo = os.path.join(
+                            base_trimestre_path, download.suggested_filename
+                        )
+
+                        download.save_as(save_path_obligacion)
+                        download.save_as(save_path_periodo)
                         print(f"  -> ¡Éxito! Guardado en: {save_path}")
 
         except Exception as e:

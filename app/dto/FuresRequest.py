@@ -8,9 +8,9 @@ class FuresDataItem(BaseModel):
 
 
 class FuresRequest(BaseModel):
-    token_ser: str
-    year: Optional[int]
-    nitDesde: Optional[int]
-    nitHasta: Optional[int]
+    token_ser: Optional[str] = None
+    year: Optional[int] = None
+    nitDesde: Optional[int] = None
+    nitHasta: Optional[int] = None
     seccion: str
-    data: Optional[List[FuresDataItem]]
+    data: Optional[List[FuresDataItem]] = None
