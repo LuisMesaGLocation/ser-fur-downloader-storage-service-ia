@@ -148,7 +148,7 @@ def obtener_fures(
             nit=nit,
             anio=year,
             expediente=int(expediente),
-            seecion=request.seccion,
+            seccion=request.seccion,
         )
         storageRepository.upload_period_and_images_standalone(
             base_download_path=download_folder,

@@ -1,4 +1,5 @@
 import os
+import shutil
 from datetime import date, datetime
 from urllib.parse import urlparse
 
@@ -411,203 +412,200 @@ class SerService:
             )
 
     def descargar_y_clasificar_pdfs(
-        self, nit: str, anio: int, expediente: int, seecion: str
+        self, nit: str, anio: int, expediente: int, seccion: str
     ):
         """
-        Prepara la vista de las tablas (con scroll y CSS), toma capturas,
-        luego itera CADA fila, la hace visible con scroll, extrae su 'Fecha Inicial'
-        para determinar el trimestre, y finalmente descarga el PDF en la carpeta correspondiente.
+        Prepara las tablas, toma capturas, itera cada fila para extraer AÑO y TRIMESTRE,
+        descarga los PDFs en sus carpetas dinámicas correctas y finalmente,
+        copia las imágenes de evidencia a cada carpeta de año y período creada.
         """
         if not self.page or self.page.is_closed():
             print("Error: La página no está disponible o ha sido cerrada.")
             return
 
         print(
-            f"--- Iniciando descarga y clasificación de PDFs para NIT {nit}, Año {anio} ---"
+            f"--- Iniciando descarga y clasificación para NIT {nit}, año de búsqueda {anio} ---"
         )
-        base_nit_path = os.path.join(
-            self.download_path,
-            seecion,
-            str(anio),
-            f"{nit}-{expediente}",
+
+        # --- FASE 1: PREPARACIÓN Y CAPTURA DE PANTALLAS ---
+        created_period_paths = set()
+        base_search_year_path = os.path.join(
+            self.download_path, seccion, str(anio), f"{nit}-{expediente}"
         )
-        os.makedirs(base_nit_path, exist_ok=True)
+        os.makedirs(base_search_year_path, exist_ok=True)
+
+        screenshot_auto_path = os.path.join(
+            base_search_year_path, f"{nit}-autoliquidaciones-general.png"
+        )
+        screenshot_obli_path = os.path.join(
+            base_search_year_path, f"{nit}-obligaciones-general.png"
+        )
 
         # --- SECCIÓN DE AUTOLIQUIDACIÓN ---
         try:
             scroll_container_1 = self.page.locator("#tabs-1 .scrollBar")
             if scroll_container_1.is_visible():
-                print(
-                    "  -> [Autoliquidación] Ajustando vista para captura de pantalla..."
-                )
-
+                print("  -> [Autoliquidación] Preparando y tomando captura...")
                 target_header_1 = self.page.locator('#tabs-1 th:has-text("Estado FUR")')
                 if target_header_1.is_visible(timeout=5000):
                     scroll_container_1.evaluate(
                         "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
                     )
-                    self.page.locator("#divbusqueda_xhs1d").click()
-                    self.page.add_style_tag(
-                        content="#divbusqueda_xhs1d { top: 0px !important; left: 900px !important; }"
-                    )
-                    target_header_1.wait_for(state="visible", timeout=10000)
-                    self.page.wait_for_timeout(1500)
+                self.page.screenshot(path=screenshot_auto_path, full_page=True)
+                print(f"  -> Captura guardada en: {screenshot_auto_path}")
 
-                screenshot_name = f"{nit}-autoliquidaciones-general.png"
-                screenshot_path = os.path.join(base_nit_path, screenshot_name)
-                self.page.screenshot(path=screenshot_path, full_page=True)
-                print(f"  -> Captura de pantalla guardada en: {screenshot_path}")
-
-                print("  -> [Autoliquidación] Procesando filas para descarga...")
                 rows = self.page.locator(
                     "#tabs-1 table.scrollBarProcesada tbody tr:has(td)"
                 )
-                num_rows = rows.count()
-                print(f"  -> Se encontraron {num_rows} filas.")
-
-                for i in range(num_rows):
-                    row = rows.nth(i)
+                print(f"  -> [Autoliquidación] Procesando {rows.count()} filas...")
+                for i in range(rows.count()):
                     try:
+                        row = rows.nth(i)
                         row.scroll_into_view_if_needed()
-                        # Aumentamos la espera para que la celda esté lista
-                        cell_locator = row.locator("td").nth(6)
-                        cell_locator.wait_for(state="visible", timeout=10000)
-                        fecha_inicial_str = cell_locator.inner_text()
-
+                        fecha_str = row.locator("td").nth(6).inner_text(timeout=10000)
                         fecha_obj = datetime.strptime(
-                            fecha_inicial_str.strip(), "%d/%m/%Y"
+                            fecha_str.strip(), "%d/%m/%Y"
                         ).date()
-                        trimestre_num = (fecha_obj.month - 1) // 3 + 1
 
-                        trimestre_path = os.path.join(
-                            base_nit_path, f"{trimestre_num}T"
+                        anio_real = fecha_obj.year
+                        trimestre = (fecha_obj.month - 1) // 3 + 1
+
+                        period_path = os.path.join(
+                            self.download_path,
+                            seccion,
+                            str(anio_real),
+                            f"{nit}-{expediente}",
+                            f"{trimestre}T",
                         )
-                        autoliquidacion_path = os.path.join(
-                            trimestre_path, "autoliquidacion"
-                        )
-                        os.makedirs(autoliquidacion_path, exist_ok=True)
+                        save_dir = os.path.join(period_path, "autoliquidacion")
+                        os.makedirs(save_dir, exist_ok=True)
+                        created_period_paths.add(period_path)
 
                         pdf_icon = row.locator("a.jqNodivLoadingForm.fa.fa-file-pdf-o")
                         if pdf_icon.count() > 0:
-                            with self.page.expect_download(
-                                timeout=60000
-                            ) as download_info:
+                            with self.page.expect_download(timeout=60000) as dl_info:
                                 pdf_icon.click()
-                            download = download_info.value
-
-                            if download.failure():
-                                print(
-                                    f"     -> ERROR en fila {i + 1}: La descarga falló. Razón: {download.failure()}"
-                                )
-                                continue
-
+                            download = dl_info.value
                             file_name = download.suggested_filename
-                            save_path = os.path.join(autoliquidacion_path, file_name)
-                            download.save_as(save_path)
+
+                            save_path_subdir = os.path.join(save_dir, file_name)
+                            download.save_as(save_path_subdir)
+
+                            save_path_period_root = os.path.join(period_path, file_name)
+                            download.save_as(save_path_period_root)
+
                             print(
-                                f"     -> Fila {i + 1}: PDF del trimestre {trimestre_num} guardado."
+                                f"     -> Fila {i + 1}: PDF del {anio_real}-T{trimestre} guardado."
                             )
                     except Exception as e:
                         print(
                             f"     -> ERROR procesando fila {i + 1} en Autoliquidación: {e}"
                         )
-                        continue
         except Exception as e:
-            print(
-                f"Ocurrió un error general en la sección de Autoliquidación para NIT {nit}: {e}"
-            )
+            print(f"Ocurrió un error general en la sección de Autoliquidación: {e}")
 
         # --- SECCIÓN DE OBLIGACIÓN ---
         try:
             print("\n  -> Navegando a la pestaña 'FURs Generados para Obligación'...")
             self.page.locator('a:has-text("FURs Generados para Obligación")').click()
-
-            # --- INICIO DE LA CORRECCIÓN ---
-            # Esperamos explícitamente a que el contenedor de la tabla de obligaciones
-            # sea visible antes de continuar.
-            print("  -> Esperando a que la tabla de Obligaciones se cargue...")
-            obligaciones_container = self.page.locator("#tabs-2 .scrollBar")
-            obligaciones_container.wait_for(state="visible", timeout=500)
+            self.page.locator("#tabs-2 .scrollBar").wait_for(
+                state="visible", timeout=10000
+            )
             print("  -> Tabla de Obligaciones visible.")
-            # --- FIN DE LA CORRECCIÓN ---
 
             scroll_container_2 = self.page.locator("#tabs-2 .scrollBar")
             if scroll_container_2.is_visible():
-                print("  -> [Obligación] Ajustando vista para captura de pantalla...")
-
+                print("  -> [Obligación] Preparando y tomando captura...")
                 target_header_2 = self.page.locator('#tabs-2 th:has-text("Estado FUR")')
                 if target_header_2.is_visible(timeout=5000):
                     scroll_container_2.evaluate(
                         "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
                     )
-                    self.page.locator("#divbusqueda_xhs1d").click()
-                    self.page.add_style_tag(
-                        content="#divbusqueda_xhs1d { top: 0px !important; left: 900px !important; }"
-                    )
-                    target_header_2.wait_for(state="visible", timeout=10000)
-                    self.page.wait_for_timeout(1500)
+                self.page.screenshot(path=screenshot_obli_path, full_page=True)
+                print(f"  -> Captura guardada en: {screenshot_obli_path}")
 
-                screenshot_name = f"{nit}-obligaciones-general.png"
-                screenshot_path = os.path.join(base_nit_path, screenshot_name)
-                self.page.screenshot(path=screenshot_path, full_page=True)
-                print(f"  -> Captura de pantalla guardada en: {screenshot_path}")
-
-                print("  -> [Obligación] Procesando filas para descarga...")
-                rows_obligacion = self.page.locator(
+                rows = self.page.locator(
                     "#tabs-2 table.scrollBarProcesada tbody tr:has(td)"
                 )
-                num_rows_obligacion = rows_obligacion.count()
-                print(f"  -> Se encontraron {num_rows_obligacion} filas.")
-
-                for i in range(num_rows_obligacion):
-                    row = rows_obligacion.nth(i)
+                print(f"  -> [Obligación] Procesando {rows.count()} filas...")
+                for i in range(rows.count()):
                     try:
+                        row = rows.nth(i)
                         row.scroll_into_view_if_needed()
-                        # La columna de fecha es la 8va, por lo tanto el índice es 7
-                        cell_locator = row.locator("td").nth(7)
-                        cell_locator.wait_for(state="visible", timeout=10000)
-                        fecha_inicial_str = cell_locator.inner_text()
-
+                        fecha_str = row.locator("td").nth(7).inner_text(timeout=10000)
                         fecha_obj = datetime.strptime(
-                            fecha_inicial_str.strip(), "%d/%m/%Y"
+                            fecha_str.strip(), "%d/%m/%Y"
                         ).date()
-                        trimestre_num = (fecha_obj.month - 1) // 3 + 1
 
-                        trimestre_path = os.path.join(
-                            base_nit_path, f"{trimestre_num}T"
+                        anio_real = fecha_obj.year
+                        trimestre = (fecha_obj.month - 1) // 3 + 1
+
+                        period_path = os.path.join(
+                            self.download_path,
+                            seccion,
+                            str(anio_real),
+                            f"{nit}-{expediente}",
+                            f"{trimestre}T",
                         )
-                        obligacion_path = os.path.join(trimestre_path, "obligacion")
-                        os.makedirs(obligacion_path, exist_ok=True)
+                        save_dir = os.path.join(period_path, "obligacion")
+                        os.makedirs(save_dir, exist_ok=True)
+                        created_period_paths.add(period_path)
 
                         pdf_icon = row.locator("a.jqNodivLoadingForm.fa.fa-file-pdf-o")
                         if pdf_icon.count() > 0:
-                            with self.page.expect_download(
-                                timeout=60000
-                            ) as download_info:
+                            with self.page.expect_download(timeout=60000) as dl_info:
                                 pdf_icon.click()
-                            download = download_info.value
-
-                            if download.failure():
-                                print(
-                                    f"     -> ERROR en fila {i + 1}: La descarga falló. Razón: {download.failure()}"
-                                )
-                                continue
-
+                            download = dl_info.value
                             file_name = download.suggested_filename
-                            save_path = os.path.join(obligacion_path, file_name)
-                            download.save_as(save_path)
+
+                            save_path_subdir = os.path.join(save_dir, file_name)
+                            download.save_as(save_path_subdir)
+
+                            save_path_period_root = os.path.join(period_path, file_name)
+                            download.save_as(save_path_period_root)
+
                             print(
-                                f"     -> Fila {i + 1}: PDF del trimestre {trimestre_num} guardado."
+                                f"     -> Fila {i + 1}: PDF del {anio_real}-T{trimestre} guardado."
                             )
                     except Exception as e:
                         print(
                             f"     -> ERROR procesando fila {i + 1} en Obligación: {e}"
                         )
-                        continue
         except Exception as e:
-            print(
-                f"Ocurrió un error general en la sección de Obligaciones para NIT {nit}: {e}"
-            )
+            print(f"Ocurrió un error general en la sección de Obligaciones: {e}")
+
+        # --- FASE 2: COPIA DINÁMICA DE IMÁGENES DE EVIDENCIA ---
+        print("\n--- Iniciando copia dinámica de imágenes de evidencia ---")
+
+        screenshots_to_copy = [screenshot_auto_path, screenshot_obli_path]
+        created_year_paths = {os.path.dirname(p) for p in created_period_paths}
+
+        for img_path in screenshots_to_copy:
+            if not os.path.exists(img_path):
+                print(
+                    f"  -> Advertencia: No se encontró la imagen {os.path.basename(img_path)}, no se copiará."
+                )
+                continue
+
+            # Copiar a la raíz de cada AÑO creado dinámicamente
+            for year_path in created_year_paths:
+                try:
+                    shutil.copy(img_path, year_path)
+                    print(
+                        f"  -> Copia de {os.path.basename(img_path)} a {year_path} exitosa."
+                    )
+                except Exception as e:
+                    print(f"  -> ERROR al copiar imagen a {year_path}: {e}")
+
+            # Copiar a la raíz de cada PERÍODO creado dinámicamente
+            for period_path in created_period_paths:
+                try:
+                    shutil.copy(img_path, period_path)
+                    print(
+                        f"  -> Copia de {os.path.basename(img_path)} a {period_path} exitosa."
+                    )
+                except Exception as e:
+                    print(f"  -> ERROR al copiar imagen a {period_path}: {e}")
 
     def close_session(self):
         """
