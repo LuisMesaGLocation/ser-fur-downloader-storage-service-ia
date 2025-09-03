@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
 from google.api_core import exceptions
@@ -93,3 +94,127 @@ class StorageRepository:
                     print(f"  -> ERROR al subir el archivo {filename}: {e}")
 
         print("--- Subida de archivos a Google Cloud Storage completada. ---")
+
+    def upload_specific_folder(self, folder_to_upload: str, relative_to_path: str):
+        """
+        Sube el contenido de un subdirectorio específico a GCS, pero construye la ruta
+        en el bucket de forma relativa a una carpeta base.
+
+        Args:
+            folder_to_upload (str): La ruta específica a la carpeta cuyo contenido se subirá.
+            relative_to_path (str): La ruta base para construir el nombre del blob en GCS.
+        """
+        if not os.path.isdir(folder_to_upload):
+            print(
+                f"Advertencia: El directorio local '{folder_to_upload}' no existe, no se subirá nada."
+            )
+            return
+
+        print(f"--- Iniciando subida del directorio '{folder_to_upload}' a GCS ---")
+
+        for root, _, files in os.walk(folder_to_upload):
+            for filename in files:
+                local_file_path = os.path.join(root, filename)
+                destination_blob_name = os.path.relpath(
+                    local_file_path, relative_to_path
+                )
+                destination_blob_name = destination_blob_name.replace("\\", "/")
+
+                print(
+                    f"  -> Subiendo '{local_file_path}' a 'gs://{self.bucket_name}/{destination_blob_name}'..."
+                )
+
+                try:
+                    blob = self.bucket.blob(destination_blob_name)
+                    blob.upload_from_filename(local_file_path)
+
+                except Exception as e:
+                    print(f"  -> ERROR al subir el archivo {filename}: {e}")
+
+        print(f"--- Subida del directorio '{folder_to_upload}' completada. ---")
+
+    def upload_period_and_images_standalone(
+        self,
+        base_download_path: str,
+        seccion: str,
+        anio: int,
+        periodo: int,
+        nit: str,
+        expediente: str,
+    ):
+        """
+        Sube los archivos de un período específico Y las imágenes generales para un ÚNICO NIT.
+        Esta función es independiente y ahora es específica para un solo NIT.
+        """
+        period_folder_name = f"{periodo}T"
+        # Construye la ruta directa a la carpeta del NIT que se está procesando
+        nit_folder_path = os.path.join(
+            base_download_path, seccion, str(anio), f"{nit}-{expediente}"
+        )
+
+        if not os.path.isdir(nit_folder_path):
+            print(
+                f"Advertencia: La carpeta del NIT '{nit_folder_path}' no existe. No se subirá nada."
+            )
+            return
+
+        print(
+            f"--- Iniciando subida para NIT {nit}, período '{period_folder_name}' ---"
+        )
+
+        upload_tasks = []
+
+        # --- 1. SUBIR ARCHIVOS DEL PERÍODO (CON DUPLICACIÓN) ---
+        period_path = os.path.join(nit_folder_path, period_folder_name)
+        if os.path.isdir(period_path):
+            print(f"  -> Encontrada carpeta de período '{period_folder_name}'.")
+            for root, _, files in os.walk(period_path):
+                for filename in files:
+                    local_file_path = os.path.join(root, filename)
+                    # Tarea 1: Subida a la ruta original
+                    dest_blob_original = os.path.relpath(
+                        local_file_path, base_download_path
+                    ).replace("\\", "/")
+                    upload_tasks.append((local_file_path, dest_blob_original))
+                    # Tarea 2: Subida a la raíz del período
+                    period_root_path = os.path.join(
+                        nit_folder_path, period_folder_name, filename
+                    )
+                    dest_blob_copy = os.path.relpath(
+                        period_root_path, base_download_path
+                    ).replace("\\", "/")
+                    upload_tasks.append((local_file_path, dest_blob_copy))
+        else:
+            print(f"  -> No se encontró carpeta del período '{period_folder_name}'.")
+
+        # --- 2. SUBIR IMÁGENES GENERALES (.png) DE LA RAÍZ DEL NIT ---
+        print("  -> Buscando imágenes generales (.png)...")
+        for item in os.listdir(nit_folder_path):
+            if item.lower().endswith(".png"):
+                local_image_path = os.path.join(nit_folder_path, item)
+                if os.path.isfile(local_image_path):
+                    dest_blob_image = os.path.relpath(
+                        local_image_path, base_download_path
+                    ).replace("\\", "/")
+                    upload_tasks.append((local_image_path, dest_blob_image))
+
+        if not upload_tasks:
+            print("  -> No se encontraron archivos para subir en este NIT y período.")
+            return
+
+        print(
+            f"  -> {len(upload_tasks)} tareas de subida listas. Ejecutando en paralelo..."
+        )
+
+        def _upload_worker(task):
+            local_path, destination_path = task
+            try:
+                blob = self.bucket.blob(destination_path)
+                blob.upload_from_filename(local_path)
+            except Exception as e:
+                print(f"    -> ERROR al subir '{local_path}': {e}")
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            executor.map(_upload_worker, upload_tasks)
+
+        print(f"--- Subida para NIT {nit} completada. ---")

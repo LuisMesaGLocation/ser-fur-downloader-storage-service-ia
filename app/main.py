@@ -1,6 +1,6 @@
 import os
 import shutil
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import List
 
 from fastapi import FastAPI, HTTPException, Query
@@ -10,7 +10,10 @@ from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
 from app.repository.BigQueryRepository import BigQueryRepository, Expediente
 from app.repository.StorageRepository import StorageRepository
-from app.utils.fecha_habil_colombia import get_next_business_day
+from app.utils.fecha_habil_colombia import (
+    get_next_business_day,
+    get_previous_business_day,
+)
 
 app = FastAPI(
     title="Servicio de Descarga FURES",
@@ -101,54 +104,74 @@ def obtener_fures(
     year = datetime.now().year
     if request.year:
         year = request.year
-    quarters = [
-        (datetime(year, 1, 1).date(), datetime(year, 3, 31).date()),
-        (datetime(year, 4, 1).date(), datetime(year, 6, 30).date()),
-        (datetime(year, 7, 1).date(), datetime(year, 9, 30).date()),
-        (datetime(year, 10, 1).date(), datetime(year, 12, 31).date()),
-    ]
+
+    start_date = datetime(year, 1, 1).date()
+
+    # --- CAMBIO EN LA LÓGICA DE LA FECHA FINAL ---
+    # 1. Obtener el primer día del mes actual
+    today = date.today()
+    first_day_of_current_month = today.replace(day=1)
+
+    # 2. Restar un día para obtener el último día del mes anterior
+    last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+
+    # 3. Asegurarse de que esa fecha sea un día hábil (retrocediendo si es necesario)
+    end_date = get_previous_business_day(last_day_of_previous_month)
+
     for sancion in expedientes_a_procesar:
-        # ASUNCIÓN: El objeto 'sancion' tiene un atributo 'nitOperador'.
-        # Si el nombre del campo es diferente (ej: sancion.nit), ajústalo aquí.
         nit = str(sancion.nitOperador)
         expediente = str(sancion.expediente)
 
-        print(f"--- Iniciando procesamiento para NIT: {nit} (desde Sanciones) ---")
+        print(
+            f"--- Iniciando procesamiento para NIT: {nit}, Expediente: {expediente}, Año: {year} ---"
+        )
+        fecha_inicial_ajustada = get_next_business_day(start_date)
+        fecha_final_ajustada = end_date  # La fecha final ya es el día hábil correcto
 
-        for i, (start_date, end_date) in enumerate(quarters):
-            fecha_inicial_ajustada = get_next_business_day(start_date)
-            fecha_final_ajustada = get_next_business_day(end_date)
-            trimestre_num = i + 1
+        print(
+            f"  -> Buscando en rango: {fecha_inicial_ajustada.strftime('%d/%m/%Y')} a {fecha_final_ajustada.strftime('%d/%m/%Y')}"
+        )
 
-            print(
-                f"  -> Buscando en trimestre: {fecha_inicial_ajustada.strftime('%d/%m/%Y')} a {fecha_final_ajustada.strftime('%d/%m/%Y')}"
-            )
+        # nit = "900014381"
+        # expediente = "96002150"
+        # nit = "800139802"
+        # expediente = "96001400"
 
-            nit = "900014381"
-            expediente = "96002150"
-            # nit = "800139802"
-            # expediente = "96001400"
+        ser_service.buscar_data(
+            nitOperador=nit,
+            expediente=expediente,
+            fechaInicial=fecha_inicial_ajustada,  # type: ignore
+            fechaFinal=fecha_final_ajustada,  # type: ignore
+        )
 
-            ser_service.buscar_data(
-                nitOperador=nit,
-                expediente=expediente,
-                fechaInicial=fecha_inicial_ajustada,  # type: ignore
-                fechaFinal=fecha_final_ajustada,  # type: ignore
-            )
-            # ¡NUEVA LÍNEA! Llamamos al método de descarga después de la búsqueda
-            ser_service.descargar_pdfs_de_tabla(
-                nit=nit,
-                anio=year,
-                trimestre=trimestre_num,
-                expediente=int(expediente),
-                seecion=request.seccion,
-            )
+        ser_service.descargar_y_clasificar_pdfs(
+            nit=nit,
+            anio=year,
+            expediente=int(expediente),
+            seecion=request.seccion,
+        )
+        storageRepository.upload_period_and_images_standalone(
+            base_download_path=download_folder,
+            seccion=request.seccion,
+            anio=year,
+            periodo=1,
+            nit=nit,
+            expediente=expediente,
+        )
+        """
+        nit_folder_path = os.path.join(
+            download_folder, request.seccion, str(year), f"{nit}-{expediente}"
+        )
+
+        storageRepository.upload_specific_folder(
+            folder_to_upload=nit_folder_path, relative_to_path=download_folder
+        )"""
 
     # 6. Cierra la sesión de Playwright DESPUÉS de terminar todos los bucles
     ser_service.close_session()
 
-    download_folder = os.getenv("DOWNLOAD_PATH", "/descargas")
-    storageRepository.upload_directory(download_folder)
+    # download_folder = os.getenv("DOWNLOAD_PATH", "/descargas")
+    # storageRepository.upload_directory(download_folder)
 
     # 7. Devuelve los datos de FURES originales, cumpliendo con el response_model
     return expedientes_a_procesar  # type: ignore

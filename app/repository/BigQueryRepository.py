@@ -9,10 +9,8 @@ from google.cloud.exceptions import GoogleCloudError
 
 @dataclass
 class Sancion:
-    yearVigencia: int
     nitOperador: int
     expediente: int
-    trimestre: int
 
 
 @dataclass
@@ -33,12 +31,10 @@ class BigQueryRepository:
 
     def obtenerSanciones(self) -> List[Sancion]:
         query_sql = """
-        SELECT DISTINCT Sanciones.ANO_VIGENCIA                                      AS yearVigencia,
-                        Sanciones.NIT                                               AS nitOperador,
-                        Sanciones.EXPEDIENTE                                        AS expediente,
-                        CAST(REPLACE(LOWER(Sanciones.TRIMESTRE), 't', '') AS INT64) AS trimestre
-        FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.SANCIONES_DIVIC_PRO AS Sanciones
-        WHERE Sanciones.CANCELADOS = 'NO';
+        SELECT DISTINCT Sanciones.EXPEDIENTE     AS expediente,
+                        Sanciones.Identificacion AS nitOperador
+        FROM `mintic-models-dev`.contraprestaciones_pro.oficios AS Sanciones
+        WHERE ESTADO = 1 LIMIT 10;
         """
 
         try:
@@ -47,10 +43,8 @@ class BigQueryRepository:
 
             results = [
                 Sancion(
-                    yearVigencia=int(row.yearVigencia),  # type: ignore
                     nitOperador=int(row.nitOperador),  # type: ignore
                     expediente=row.expediente,  # type: ignore
-                    trimestre=int(row.trimestre),  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
@@ -64,20 +58,12 @@ class BigQueryRepository:
 
     def obtenerExpedientes(self) -> List[Expediente]:
         query_sql = """
-        SELECT VW_E_BDU.Identificacion AS nitOperador,
-               VW_E_BDU.Expediente     AS expediente,
-        FROM `mintic-models-dev`.contraprestaciones_pro.VW_EXPEDIENTES_BDU AS VW_E_BDU
-                 INNER JOIN
-             `mintic-models-dev`.contraprestaciones_pro.rues_nit AS RUES
-             ON SAFE_CAST(VW_E_BDU.Identificacion AS INT64) = SAFE_CAST(RUES.numIdTributaria AS INT64)
-                 LEFT JOIN
-             UNNEST(RUES.informacionRepresentanteLegalPrincipal) AS rep_legal_principal
-        WHERE TRIM(VW_E_BDU.`Tipo Identificacion`) = 'NIT'
-          AND RUES.nomEstadoMatricula != 'CANCELADA'
-        QUALIFY ROW_NUMBER() OVER (
-            PARTITION BY VW_E_BDU.Identificacion, VW_E_BDU.Expediente
-            ORDER BY CAST(VW_E_BDU.FECHA_EJECUCION AS TIMESTAMP) DESC
-            ) = 1 ORDER BY nitOperador ASC, expediente ASC;
+        SELECT DISTINCT Sanciones.EXPEDIENTE     AS expediente,
+                        Sanciones.Identificacion AS nitOperador
+        FROM `mintic-models-dev`.contraprestaciones_pro.oficios AS Sanciones
+        WHERE ESTADO = 1
+        ORDER BY expediente, nitOperador
+        LIMIT 200 OFFSET 55;
         """
 
         try:

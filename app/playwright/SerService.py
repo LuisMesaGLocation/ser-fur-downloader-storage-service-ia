@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, datetime
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -55,7 +55,7 @@ class SerService:
         # Iniciamos Playwright y mantenemos la sesión abierta
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
-        self.browser = self.playwright.chromium.launch(headless=True)
+        self.browser = self.playwright.chromium.launch(headless=False)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
@@ -408,6 +408,205 @@ class SerService:
             self.page.screenshot(path=screenshot_path)
             print(
                 f"  -> ¡Error! Se guardó una captura de pantalla en: {screenshot_path}"
+            )
+
+    def descargar_y_clasificar_pdfs(
+        self, nit: str, anio: int, expediente: int, seecion: str
+    ):
+        """
+        Prepara la vista de las tablas (con scroll y CSS), toma capturas,
+        luego itera CADA fila, la hace visible con scroll, extrae su 'Fecha Inicial'
+        para determinar el trimestre, y finalmente descarga el PDF en la carpeta correspondiente.
+        """
+        if not self.page or self.page.is_closed():
+            print("Error: La página no está disponible o ha sido cerrada.")
+            return
+
+        print(
+            f"--- Iniciando descarga y clasificación de PDFs para NIT {nit}, Año {anio} ---"
+        )
+        base_nit_path = os.path.join(
+            self.download_path,
+            seecion,
+            str(anio),
+            f"{nit}-{expediente}",
+        )
+        os.makedirs(base_nit_path, exist_ok=True)
+
+        # --- SECCIÓN DE AUTOLIQUIDACIÓN ---
+        try:
+            scroll_container_1 = self.page.locator("#tabs-1 .scrollBar")
+            if scroll_container_1.is_visible():
+                print(
+                    "  -> [Autoliquidación] Ajustando vista para captura de pantalla..."
+                )
+
+                target_header_1 = self.page.locator('#tabs-1 th:has-text("Estado FUR")')
+                if target_header_1.is_visible(timeout=5000):
+                    scroll_container_1.evaluate(
+                        "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
+                    )
+                    self.page.locator("#divbusqueda_xhs1d").click()
+                    self.page.add_style_tag(
+                        content="#divbusqueda_xhs1d { top: 0px !important; left: 900px !important; }"
+                    )
+                    target_header_1.wait_for(state="visible", timeout=10000)
+                    self.page.wait_for_timeout(1500)
+
+                screenshot_name = f"{nit}-autoliquidaciones-general.png"
+                screenshot_path = os.path.join(base_nit_path, screenshot_name)
+                self.page.screenshot(path=screenshot_path, full_page=True)
+                print(f"  -> Captura de pantalla guardada en: {screenshot_path}")
+
+                print("  -> [Autoliquidación] Procesando filas para descarga...")
+                rows = self.page.locator(
+                    "#tabs-1 table.scrollBarProcesada tbody tr:has(td)"
+                )
+                num_rows = rows.count()
+                print(f"  -> Se encontraron {num_rows} filas.")
+
+                for i in range(num_rows):
+                    row = rows.nth(i)
+                    try:
+                        row.scroll_into_view_if_needed()
+                        # Aumentamos la espera para que la celda esté lista
+                        cell_locator = row.locator("td").nth(6)
+                        cell_locator.wait_for(state="visible", timeout=10000)
+                        fecha_inicial_str = cell_locator.inner_text()
+
+                        fecha_obj = datetime.strptime(
+                            fecha_inicial_str.strip(), "%d/%m/%Y"
+                        ).date()
+                        trimestre_num = (fecha_obj.month - 1) // 3 + 1
+
+                        trimestre_path = os.path.join(
+                            base_nit_path, f"{trimestre_num}T"
+                        )
+                        autoliquidacion_path = os.path.join(
+                            trimestre_path, "autoliquidacion"
+                        )
+                        os.makedirs(autoliquidacion_path, exist_ok=True)
+
+                        pdf_icon = row.locator("a.jqNodivLoadingForm.fa.fa-file-pdf-o")
+                        if pdf_icon.count() > 0:
+                            with self.page.expect_download(
+                                timeout=60000
+                            ) as download_info:
+                                pdf_icon.click()
+                            download = download_info.value
+
+                            if download.failure():
+                                print(
+                                    f"     -> ERROR en fila {i + 1}: La descarga falló. Razón: {download.failure()}"
+                                )
+                                continue
+
+                            file_name = download.suggested_filename
+                            save_path = os.path.join(autoliquidacion_path, file_name)
+                            download.save_as(save_path)
+                            print(
+                                f"     -> Fila {i + 1}: PDF del trimestre {trimestre_num} guardado."
+                            )
+                    except Exception as e:
+                        print(
+                            f"     -> ERROR procesando fila {i + 1} en Autoliquidación: {e}"
+                        )
+                        continue
+        except Exception as e:
+            print(
+                f"Ocurrió un error general en la sección de Autoliquidación para NIT {nit}: {e}"
+            )
+
+        # --- SECCIÓN DE OBLIGACIÓN ---
+        try:
+            print("\n  -> Navegando a la pestaña 'FURs Generados para Obligación'...")
+            self.page.locator('a:has-text("FURs Generados para Obligación")').click()
+
+            # --- INICIO DE LA CORRECCIÓN ---
+            # Esperamos explícitamente a que el contenedor de la tabla de obligaciones
+            # sea visible antes de continuar.
+            print("  -> Esperando a que la tabla de Obligaciones se cargue...")
+            obligaciones_container = self.page.locator("#tabs-2 .scrollBar")
+            obligaciones_container.wait_for(state="visible", timeout=500)
+            print("  -> Tabla de Obligaciones visible.")
+            # --- FIN DE LA CORRECCIÓN ---
+
+            scroll_container_2 = self.page.locator("#tabs-2 .scrollBar")
+            if scroll_container_2.is_visible():
+                print("  -> [Obligación] Ajustando vista para captura de pantalla...")
+
+                target_header_2 = self.page.locator('#tabs-2 th:has-text("Estado FUR")')
+                if target_header_2.is_visible(timeout=5000):
+                    scroll_container_2.evaluate(
+                        "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
+                    )
+                    self.page.locator("#divbusqueda_xhs1d").click()
+                    self.page.add_style_tag(
+                        content="#divbusqueda_xhs1d { top: 0px !important; left: 900px !important; }"
+                    )
+                    target_header_2.wait_for(state="visible", timeout=10000)
+                    self.page.wait_for_timeout(1500)
+
+                screenshot_name = f"{nit}-obligaciones-general.png"
+                screenshot_path = os.path.join(base_nit_path, screenshot_name)
+                self.page.screenshot(path=screenshot_path, full_page=True)
+                print(f"  -> Captura de pantalla guardada en: {screenshot_path}")
+
+                print("  -> [Obligación] Procesando filas para descarga...")
+                rows_obligacion = self.page.locator(
+                    "#tabs-2 table.scrollBarProcesada tbody tr:has(td)"
+                )
+                num_rows_obligacion = rows_obligacion.count()
+                print(f"  -> Se encontraron {num_rows_obligacion} filas.")
+
+                for i in range(num_rows_obligacion):
+                    row = rows_obligacion.nth(i)
+                    try:
+                        row.scroll_into_view_if_needed()
+                        # La columna de fecha es la 8va, por lo tanto el índice es 7
+                        cell_locator = row.locator("td").nth(7)
+                        cell_locator.wait_for(state="visible", timeout=10000)
+                        fecha_inicial_str = cell_locator.inner_text()
+
+                        fecha_obj = datetime.strptime(
+                            fecha_inicial_str.strip(), "%d/%m/%Y"
+                        ).date()
+                        trimestre_num = (fecha_obj.month - 1) // 3 + 1
+
+                        trimestre_path = os.path.join(
+                            base_nit_path, f"{trimestre_num}T"
+                        )
+                        obligacion_path = os.path.join(trimestre_path, "obligacion")
+                        os.makedirs(obligacion_path, exist_ok=True)
+
+                        pdf_icon = row.locator("a.jqNodivLoadingForm.fa.fa-file-pdf-o")
+                        if pdf_icon.count() > 0:
+                            with self.page.expect_download(
+                                timeout=60000
+                            ) as download_info:
+                                pdf_icon.click()
+                            download = download_info.value
+
+                            if download.failure():
+                                print(
+                                    f"     -> ERROR en fila {i + 1}: La descarga falló. Razón: {download.failure()}"
+                                )
+                                continue
+
+                            file_name = download.suggested_filename
+                            save_path = os.path.join(obligacion_path, file_name)
+                            download.save_as(save_path)
+                            print(
+                                f"     -> Fila {i + 1}: PDF del trimestre {trimestre_num} guardado."
+                            )
+                    except Exception as e:
+                        print(
+                            f"     -> ERROR procesando fila {i + 1} en Obligación: {e}"
+                        )
+                        continue
+        except Exception as e:
+            print(
+                f"Ocurrió un error general en la sección de Obligaciones para NIT {nit}: {e}"
             )
 
     def close_session(self):
