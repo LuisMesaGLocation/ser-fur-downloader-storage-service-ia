@@ -62,7 +62,8 @@ class BigQueryRepository:
                         Sanciones.Identificacion AS nitOperador
         FROM `mintic-models-dev`.contraprestaciones_pro.oficios AS Sanciones
         WHERE ESTADO = 1
-        LIMIT 200 OFFSET 127;
+        ORDER BY nitOperador, expediente ASC;
+        ---LIMIT 186 OFFSET 152;
         """
 
         try:
