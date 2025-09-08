@@ -19,6 +19,16 @@ class Expediente:
     expediente: int
 
 
+class Oficio:
+    radicado: str
+    fecha_radicado: str
+    tramite: str
+    year: int
+    nit: str
+    expediente: str
+    trimestre: int
+
+
 class BigQueryRepository:
     """
     Una clase para interactuar con Google BigQuery, encargada de obtener
