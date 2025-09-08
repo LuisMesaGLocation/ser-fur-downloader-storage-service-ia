@@ -9,7 +9,7 @@ from typing_extensions import Any, Dict, Optional
 from app.config.cors import configure_cors
 from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
-from app.repository.BigQueryRepository import BigQueryRepository, Expediente
+from app.repository.BigQueryRepository import BigQueryRepository, Expediente, Oficio
 from app.repository.StorageRepository import StorageRepository
 from app.security.firebase_auth import get_current_user, initialize_firebase_app
 from app.utils.fecha_habil_colombia import (
@@ -63,45 +63,34 @@ def obtener_fures(
     print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
     print(f"UID del usuario: {current_user.get('uid')}")
 
-    """
-    Endpoint para obtener los 10 registros más recientes de FURES
-    desde BigQuery, procesados para obtener la última ingesta por
-    operador y periodo.
-    """
     download_folder = ser_service.download_path
     if os.path.exists(download_folder):
         print(f"Limpiando directorio de descargas principal: {download_folder}")
         shutil.rmtree(download_folder)
 
-    datos_expedientes: List[Expediente]
+    expedientes_a_procesar: List[Oficio]
     if originData == "database":
         print("📊 Obteniendo datos desde BigQuery...")
-        datos_expedientes = repo.obtenerExpedientes()
-        expedientes_a_procesar = datos_expedientes
-        total_registros = len(datos_expedientes)
+        expedientes_a_procesar = repo.getOficios()
 
-        # Aplicar filtros de NIT si se proporcionan
         if request.nitDesde is not None and request.nitHasta is not None:
             print(
                 f"🔍 Filtrando registros por NIT en el rango: desde {request.nitDesde} hasta {request.nitHasta}"
             )
-
             if request.nitHasta < request.nitDesde:
                 raise HTTPException(
                     status_code=400,
                     detail="Rango inválido: nitHasta no puede ser menor que nitDesde.",
                 )
-
             expedientes_a_procesar = [
                 exp
-                for exp in datos_expedientes
-                if request.nitDesde <= int(exp.nitOperador) <= request.nitHasta
+                for exp in expedientes_a_procesar
+                if exp.nitOperador is not None
+                and request.nitDesde <= int(exp.nitOperador) <= request.nitHasta
             ]
-
             print(
-                f"✅ Se encontraron {len(expedientes_a_procesar)} registros de un total de {total_registros} para procesar en el rango."
+                f"✅ Se encontraron {len(expedientes_a_procesar)} registros para procesar en el rango."
             )
-
     else:
         print("📄 Usando datos del body de la petición...")
         if not request.data:
@@ -109,89 +98,137 @@ def obtener_fures(
                 status_code=400,
                 detail="Cuando no se usa 'originData=database', el campo 'data' es requerido en el body.",
             )
-
-        # Convertir los datos del body a objetos Expediente para mantener consistencia
         expedientes_a_procesar = [
-            Expediente(nitOperador=item.nitOperador, expediente=item.expediente)
+            Oficio(
+                radicado=item.radicado,
+                year=item.year,
+                nitOperador=item.nitOperador,
+                expediente=item.expediente,
+                trimestre=item.trimestre,
+                trimestre_asignado=item.trimestre_asignado,
+                year_asignado=item.year_asignado,
+            )
             for item in request.data
         ]
         print(
             f"✅ Se procesarán {len(expedientes_a_procesar)} registros enviados en el body."
         )
 
-    # ser_service.start_session(token_ser=request.token_ser)
+    if not expedientes_a_procesar:
+        print("No hay expedientes para procesar. Finalizando.")
+        return List[Expediente]
+
+    radicado_principal = expedientes_a_procesar[0].radicado
+    seccion_final: str = request.seccion
+    if radicado_principal:
+        seccion_final = f"{request.seccion}-{radicado_principal}"
+
     ser_service.login()
-    year = datetime.now().year
-    if request.year:
-        year = request.year
-
-    start_date = datetime(year, 1, 1).date()
-
-    # --- CAMBIO EN LA LÓGICA DE LA FECHA FINAL ---
-    # 1. Obtener el primer día del mes actual
-    today = date.today()
-    first_day_of_current_month = today.replace(day=1)
-
-    # 2. Restar un día para obtener el último día del mes anterior
-    last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
-
-    # 3. Asegurarse de que esa fecha sea un día hábil (retrocediendo si es necesario)
-    end_date = get_previous_business_day(last_day_of_previous_month)
 
     for sancion in expedientes_a_procesar:
+        if not sancion.nitOperador or not sancion.expediente:
+            print(f"⚠️ Omitiendo registro por falta de NIT o expediente: {sancion}")
+            continue
+
+        # --- NUEVA LÓGICA DE DECISIÓN POR EXPEDIENTE ---
+        # 1. Decidir el año a utilizar para la búsqueda
+        anio_busqueda = (
+            sancion.year if sancion.year is not None else sancion.year_asignado
+        )
+        if anio_busqueda is None:
+            # Fallback al año de la petición o al año actual si no hay ninguno
+            anio_busqueda = (
+                request.year if request.year is not None else datetime.now().year
+            )
+
+        # 2. Decidir la lista de trimestres a subir al Storage
+        trimestres_a_subir = (
+            sancion.trimestre if sancion.trimestre else sancion.trimestre_asignado
+        )
+        if trimestres_a_subir is None:
+            trimestres_a_subir = []  # Si no hay trimestres especificados, no se subirá nada.
+
         nit = str(sancion.nitOperador)
         expediente = str(sancion.expediente)
 
+        nit = "900551918"
+        expediente = "96002072"
         print(
-            f"--- Iniciando procesamiento para NIT: {nit}, Expediente: {expediente}, Año: {year} ---"
+            f"--- Iniciando procesamiento para NIT: {nit}, Expediente: {expediente} ---"
         )
+        print(f"  -> Año de búsqueda decidido: {anio_busqueda}")
+        print(f"  -> Trimestres a subir al Storage: {trimestres_a_subir}")
+
+        # --- LÓGICA DE FECHAS AHORA DENTRO DEL BUCLE ---
+        start_date = datetime(anio_busqueda, 1, 1).date()
+        today = date.today()
+        # Si el año de búsqueda no es el actual, buscamos hasta el final de ese año.
+        if anio_busqueda < today.year:
+            end_date = datetime(anio_busqueda, 12, 31).date()
+        else:  # Si es el año actual, buscamos hasta el mes anterior.
+            first_day_of_current_month = today.replace(day=1)
+            last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+            end_date = last_day_of_previous_month
+
         fecha_inicial_ajustada = get_next_business_day(start_date)
-        fecha_final_ajustada = end_date  # La fecha final ya es el día hábil correcto
+        fecha_final_ajustada = get_previous_business_day(end_date)
+        # --- FIN LÓGICA DE FECHAS ---
 
         print(
-            f"  -> Buscando en rango: {fecha_inicial_ajustada.strftime('%d/%m/%Y')} a {fecha_final_ajustada.strftime('%d/%m/%Y')}"
+            f"  -> Buscando en SER en rango: {fecha_inicial_ajustada.strftime('%d/%m/%Y')} a {fecha_final_ajustada.strftime('%d/%m/%Y')}"
         )
-
-        # nit = "900014381"
-        # expediente = "96002150"
-        # nit = "800139802"
-        # expediente = "96001400"
 
         ser_service.buscar_data(
             nitOperador=nit,
             expediente=expediente,
-            fechaInicial=fecha_inicial_ajustada,  # type: ignore
-            fechaFinal=fecha_final_ajustada,  # type: ignore
+            fechaInicial=fecha_inicial_ajustada,
+            fechaFinal=fecha_final_ajustada,
         )
 
+        # Esta función ya descarga y clasifica todo lo que encuentra en la web en carpetas correctas
         ser_service.descargar_y_clasificar_pdfs(
             nit=nit,
-            anio=year,
+            anio=anio_busqueda,  # Usamos el año de búsqueda como referencia
             expediente=int(expediente),
-            seccion=request.seccion,
-        )
-        storageRepository.upload_period_and_images_standalone(
-            base_download_path=download_folder,
-            seccion=request.seccion,
-            anio=year,
-            periodo=1,
-            nit=nit,
-            expediente=expediente,
-        )
-        """
-        nit_folder_path = os.path.join(
-            download_folder, request.seccion, str(year), f"{nit}-{expediente}"
+            seccion=seccion_final,
         )
 
-        storageRepository.upload_specific_folder(
-            folder_to_upload=nit_folder_path, relative_to_path=download_folder
-        )"""
+        # --- NUEVA LÓGICA DE SUBIDA SELECTIVA AL STORAGE ---
+        if not trimestres_a_subir:
+            print(
+                "  -> No hay trimestres especificados para subir al Storage. Omitiendo subida."
+            )
+        else:
+            print(
+                f"  -> Iniciando subida selectiva para los trimestres: {trimestres_a_subir}"
+            )
+            for trimestre in trimestres_a_subir:
+                print(
+                    f"    -> Subiendo datos para el período: {anio_busqueda}-T{trimestre}"
+                )
+                storageRepository.upload_period_and_images_standalone(
+                    base_download_path=download_folder,
+                    seccion=seccion_final,
+                    anio=anio_busqueda,
+                    periodo=trimestre,
+                    nit=nit,
+                    expediente=expediente,
+                )
 
-    # 6. Cierra la sesión de Playwright DESPUÉS de terminar todos los bucles
     ser_service.close_session()
 
-    # download_folder = os.getenv("DOWNLOAD_PATH", "/descargas")
-    # storageRepository.upload_directory(download_folder)
+    # La respuesta final sigue siendo la misma, convirtiendo a Expediente
+    respuesta_final: List[Expediente] = []
+    for oficio in expedientes_a_procesar:
+        if oficio.nitOperador and oficio.expediente:
+            try:
+                respuesta_final.append(
+                    Expediente(
+                        nitOperador=int(oficio.nitOperador),
+                        expediente=int(oficio.expediente),
+                    )
+                )
+            except (ValueError, TypeError):
+                pass
 
-    # 7. Devuelve los datos de FURES originales, cumpliendo con el response_model
-    return expedientes_a_procesar  # type: ignore
+    return respuesta_final

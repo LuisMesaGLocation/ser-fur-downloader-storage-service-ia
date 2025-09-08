@@ -1,45 +1,213 @@
 {
-  "year": 2024,
   "seccion": "00001",
+  "year": 2024,
   "data": [
-    { "nitOperador": "807000949", "expediente": "69000044" },
-    { "nitOperador": "802004119", "expediente": "69000100" },
-    { "nitOperador": "811034171", "expediente": "69000103" },
-    { "nitOperador": "860020381", "expediente": "69000147" },
-    { "nitOperador": "830046888", "expediente": "69000167" },
-    { "nitOperador": "805020166", "expediente": "69000242" },
-    { "nitOperador": "816001765", "expediente": "81000004" },
-    { "nitOperador": "832001643", "expediente": "81000005" },
-    { "nitOperador": "805008218", "expediente": "81000010" },
-    { "nitOperador": "830039593", "expediente": "81000011" },
-    { "nitOperador": "811016918", "expediente": "81000019" },
-    { "nitOperador": "804001359", "expediente": "81000023" },
-    { "nitOperador": "811007809", "expediente": "81000030" },
-    { "nitOperador": "804004702", "expediente": "81000033" },
-    { "nitOperador": "811023838", "expediente": "81000034" },
-    { "nitOperador": "800196385", "expediente": "81000036" },
-    { "nitOperador": "808000812", "expediente": "81000062" },
-    { "nitOperador": "832006673", "expediente": "81000082" },
-    { "nitOperador": "844004021", "expediente": "81000089" },
-    { "nitOperador": "824006244", "expediente": "81000109" },
-    { "nitOperador": "812007703", "expediente": "81000110" },
-    { "nitOperador": "817007259", "expediente": "81000124" },
-    { "nitOperador": "900048461", "expediente": "81000134" },
-    { "nitOperador": "900043542", "expediente": "81000138" },
-    { "nitOperador": "818001643", "expediente": "81000145" },
-    { "nitOperador": "811027342", "expediente": "81000173" },
-    { "nitOperador": "811034071", "expediente": "81000199" },
-    { "nitOperador": "800162159", "expediente": "81000255" },
-    { "nitOperador": "811025026", "expediente": "81000298" },
-    { "nitOperador": "901099193", "expediente": "81000309" },
-    { "nitOperador": "817004653", "expediente": "81000310" },
-    { "nitOperador": "820003624", "expediente": "81000328" },
-    { "nitOperador": "800156339", "expediente": "81000333" },
-    { "nitOperador": "830032910", "expediente": "81000337" },
-    { "nitOperador": "811019068", "expediente": "81000353" },
-    { "nitOperador": "807008480", "expediente": "81000366" },
-    { "nitOperador": "900837394", "expediente": "96005214" },
-    { "nitOperador": "806005432", "expediente": "53068" },
-    { "nitOperador": "900145587", "expediente": "69000208" }
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900410244",
+      "expediente": "96003949",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900416718",
+      "expediente": "96003232",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900487204",
+      "expediente": "96003325",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900524666",
+      "expediente": "96001063",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900551918",
+      "expediente": "96002072",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900586451",
+      "expediente": "96001509",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900590470",
+      "expediente": "96004898",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900772593",
+      "expediente": "96005431",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900928693",
+      "expediente": "96003345",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901062199",
+      "expediente": "96003522",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901154951",
+      "expediente": "96004199",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901184414",
+      "expediente": "96004612",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901240753",
+      "expediente": "96004447",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901259587",
+      "expediente": "96004901",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901267163",
+      "expediente": "96006140",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901277316",
+      "expediente": "96005239",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901330791",
+      "expediente": "96005049",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901332024",
+      "expediente": "96005016",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901410065",
+      "expediente": "96005951",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901419135",
+      "expediente": "96006095",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901497770",
+      "expediente": "96006344",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901537133",
+      "expediente": "96007071",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901758957",
+      "expediente": "96008447",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    }
   ]
 }

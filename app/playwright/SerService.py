@@ -56,7 +56,7 @@ class SerService:
         # Iniciamos Playwright y mantenemos la sesión abierta
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
-        self.browser = self.playwright.chromium.launch(headless=True)
+        self.browser = self.playwright.chromium.launch(headless=False)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
@@ -451,6 +451,31 @@ class SerService:
                     scroll_container_1.evaluate(
                         "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
                     )
+                javascript_a_inyectar = """
+                () => {
+                    // 1. Busca el contenedor principal una sola vez
+                    const container = document.querySelector("#divbusqueda_xhs1d");
+
+                    // 2. Si el contenedor existe, procede
+                    if (container) {
+                        // 3. Busca el ícono de restaurar DENTRO del contenedor y haz clic
+                        const restoreIcon = container.querySelector("img.restoreContainer");
+                        if (restoreIcon) {
+                            restoreIcon.click();
+                        }
+
+                        // 4. Modifica los estilos del contenedor con máxima prioridad
+                        container.style.setProperty("left", "900px", "important");
+                        container.style.setProperty("top", "0px", "important");
+                    }
+                }
+                """
+
+                # Ejecuta el script completo en el contexto de la página
+                self.page.evaluate(javascript_a_inyectar)
+                self.page.wait_for_timeout(500)
+                self.page.evaluate(javascript_a_inyectar)
+                self.page.wait_for_timeout(500)
                 self.page.screenshot(path=screenshot_auto_path, full_page=True)
                 print(f"  -> Captura guardada en: {screenshot_auto_path}")
 
@@ -521,6 +546,31 @@ class SerService:
                     scroll_container_2.evaluate(
                         "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
                     )
+                javascript_a_inyectar = """
+                () => {
+                    // 1. Busca el contenedor principal una sola vez
+                    const container = document.querySelector("#divbusqueda_xhs1d");
+
+                    // 2. Si el contenedor existe, procede
+                    if (container) {
+                        // 3. Busca el ícono de restaurar DENTRO del contenedor y haz clic
+                        const restoreIcon = container.querySelector("img.restoreContainer");
+                        if (restoreIcon) {
+                            restoreIcon.click();
+                        }
+
+                        // 4. Modifica los estilos del contenedor con máxima prioridad
+                        container.style.setProperty("left", "900px", "important");
+                        container.style.setProperty("top", "0px", "important");
+                    }
+                }
+                """
+
+                # Ejecuta el script completo en el contexto de la página
+                self.page.evaluate(javascript_a_inyectar)
+                self.page.wait_for_timeout(500)
+                self.page.evaluate(javascript_a_inyectar)
+                self.page.wait_for_timeout(500)
                 self.page.screenshot(path=screenshot_obli_path, full_page=True)
                 print(f"  -> Captura guardada en: {screenshot_obli_path}")
 

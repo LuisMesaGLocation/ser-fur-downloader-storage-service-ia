@@ -3,8 +3,16 @@ from typing_extensions import List, Optional
 
 
 class FuresDataItem(BaseModel):
-    nitOperador: int
-    expediente: int
+    # Campos obligatorios, alineados con el tipo de Oficio (str)
+    nitOperador: str
+    expediente: str
+
+    # Campos opcionales para que coincida con la estructura completa de Oficio
+    radicado: Optional[str] = None
+    year: Optional[int] = None
+    trimestre: Optional[List[int]] = None
+    trimestre_asignado: Optional[List[int]] = None
+    year_asignado: Optional[int] = None
 
 
 class FuresRequest(BaseModel):
