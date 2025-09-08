@@ -5,6 +5,7 @@ from typing import List
 
 from google.cloud import bigquery
 from google.cloud.exceptions import GoogleCloudError
+from typing_extensions import Optional
 
 
 @dataclass
@@ -19,14 +20,15 @@ class Expediente:
     expediente: int
 
 
+@dataclass
 class Oficio:
-    radicado: str
-    fecha_radicado: str
-    tramite: str
-    year: int
-    nit: str
-    expediente: str
-    trimestre: int
+    radicado: Optional[str]
+    fecha_radicado: Optional[str]
+    tramite: Optional[str]
+    year: Optional[int]
+    nit: Optional[str]
+    expediente: Optional[str]
+    trimestre: Optional[int]
 
 
 class BigQueryRepository:
@@ -84,6 +86,46 @@ class BigQueryRepository:
                 Expediente(
                     nitOperador=int(row.nitOperador),  # type: ignore
                     expediente=row.expediente,  # type: ignore
+                )
+                for row in query_job.result()  # type: ignore
+            ]
+
+            print(f"Consulta finalizada. Se obtuvieron {len(results)} registros.")
+            return results
+
+        except GoogleCloudError as e:
+            print(f"Error al ejecutar la consulta en BigQuery: {e}")
+            return []
+
+    def getOficios(self) -> List[Oficio]:
+        query_sql = """
+        SELECT DISTINCT t.radicado,
+                        t.fecha_radicado,
+                        t.tramite,
+                        t.year,
+                        registros.nit,
+                        registros.expediente,
+                        trimestre
+        FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.oficios_prueba AS t
+                 LEFT JOIN
+             UNNEST(t.registros_excel) AS registros
+                 LEFT JOIN
+             UNNEST(t.trimestre) AS trimestre;
+        """
+
+        try:
+            print("Ejecutando consulta de los oficios.")
+            query_job = self.bigquery_client.query(query_sql)
+
+            results = [
+                Oficio(
+                    radicado=row.radicado,  # type: ignore
+                    fecha_radicado=row.fecha_radicado,  # type: ignore
+                    tramite=row.tramite,  # type: ignore
+                    year=row.year,  # type: ignore
+                    nit=row.nit,  # type: ignore
+                    expediente=row.expediente,  # type: ignore
+                    trimestre=row.trimestre,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
