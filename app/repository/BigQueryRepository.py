@@ -1,6 +1,4 @@
 from dataclasses import dataclass
-
-# PASO 1: Asegúrate de que `cast` está importado desde `typing`
 from typing import List
 
 from google.cloud import bigquery

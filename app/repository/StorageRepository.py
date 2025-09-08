@@ -31,7 +31,7 @@ class StorageRepository:
                 self.bucket_name
             )  # <- 2. Añade la anotación de tipo
 
-            if not self.bucket.exists():
+            if not self.bucket.exists():  # type: ignore
                 # En un entorno de producción, es mejor que el bucket ya esté creado.
                 # Lanzar un error es más seguro que crearlo programáticamente.
                 raise FileNotFoundError(

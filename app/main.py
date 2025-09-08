@@ -3,13 +3,15 @@ import shutil
 from datetime import date, datetime, timedelta
 from typing import List
 
-from fastapi import FastAPI, HTTPException, Query
-from typing_extensions import Optional
+from fastapi import Depends, FastAPI, HTTPException, Query
+from typing_extensions import Any, Dict, Optional
 
+from app.config.cors import configure_cors
 from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
 from app.repository.BigQueryRepository import BigQueryRepository, Expediente
 from app.repository.StorageRepository import StorageRepository
+from app.security.firebase_auth import get_current_user, initialize_firebase_app
 from app.utils.fecha_habil_colombia import (
     get_next_business_day,
     get_previous_business_day,
@@ -20,13 +22,27 @@ app = FastAPI(
     description="Una API para interactuar con los datos de FURES en BigQuery.",
     version="1.0.0",
 )
+
+origins = [
+    "http://localhost:3000",
+    "https://dev.modelos.mintic.gov.co",
+    "https://modelos.mintic.gov.co",
+]
+
+configure_cors(app, origins)
+# Llama a la función de inicialización cuando este módulo se cargue
+initialize_firebase_app()
 repo = BigQueryRepository()
 ser_service = SerService()
 storageRepository = StorageRepository()
 
 
 @app.get("/hola")
-def read_root():
+def read_root(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
+    print(f"UID del usuario: {current_user.get('uid')}")
     return {"Hello": "World"}
 
 
@@ -42,7 +58,11 @@ def obtener_fures(
         None,
         description="Origen de los datos: 'database' para BigQuery, otro valor o None para usar datos del body",
     ),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
+    print(f"UID del usuario: {current_user.get('uid')}")
+
     """
     Endpoint para obtener los 10 registros más recientes de FURES
     desde BigQuery, procesados para obtener la última ingesta por
