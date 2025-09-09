@@ -9,7 +9,12 @@ from typing_extensions import Any, Dict, Optional
 from app.config.cors import configure_cors
 from app.dto.FuresRequest import FuresRequest
 from app.playwright.SerService import SerService
-from app.repository.BigQueryRepository import BigQueryRepository, Expediente, Oficio
+from app.repository.BigQueryRepository import (
+    BigQueryRepository,
+    Expediente,
+    Oficio,
+    RpaFursLog,
+)
 from app.repository.StorageRepository import StorageRepository
 from app.security.firebase_auth import get_current_user, initialize_firebase_app
 from app.utils.fecha_habil_colombia import (
@@ -151,8 +156,8 @@ def obtener_fures(
         nit = str(sancion.nitOperador)
         expediente = str(sancion.expediente)
 
-        nit = "900551918"
-        expediente = "96002072"
+        # nit = "900551918"
+        # expediente = "96002072"
         print(
             f"--- Iniciando procesamiento para NIT: {nit}, Expediente: {expediente} ---"
         )
@@ -191,6 +196,7 @@ def obtener_fures(
             anio=anio_busqueda,  # Usamos el año de búsqueda como referencia
             expediente=int(expediente),
             seccion=seccion_final,
+            trimestres=trimestres_a_subir,
         )
 
         # --- NUEVA LÓGICA DE SUBIDA SELECTIVA AL STORAGE ---
@@ -206,14 +212,49 @@ def obtener_fures(
                 print(
                     f"    -> Subiendo datos para el período: {anio_busqueda}-T{trimestre}"
                 )
-                storageRepository.upload_period_and_images_standalone(
-                    base_download_path=download_folder,
-                    seccion=seccion_final,
-                    anio=anio_busqueda,
-                    periodo=trimestre,
-                    nit=nit,
-                    expediente=expediente,
+
+                # --- CAMBIO 3: Capturar la tupla devuelta por el repositorio ---
+                uploaded_urls, gsutil_paths = (
+                    storageRepository.upload_period_and_images_standalone(
+                        base_download_path=download_folder,
+                        seccion=seccion_final,
+                        anio=anio_busqueda,
+                        periodo=trimestre,
+                        nit=nit,
+                        expediente=expediente,
+                    )
                 )
+
+                # --- CAMBIO 4: Lógica de filtrado para ambos tipos de listas ---
+                image_urls: List[str] = []
+                gs_images: List[str] = []
+                doc_urls: List[str] = []
+                gs_docs: List[str] = []
+
+                for url, gs_path in zip(uploaded_urls, gsutil_paths):
+                    if gs_path.lower().endswith((".png", ".jpg", ".jpeg")):
+                        image_urls.append(url)
+                        gs_images.append(gs_path)
+                    elif gs_path.lower().endswith(".pdf"):
+                        doc_urls.append(url)
+                        gs_docs.append(gs_path)
+
+                # --- CAMBIO 5: Construir el objeto de log completo ---
+                log = RpaFursLog(
+                    sesion=seccion_final,
+                    radicado=sancion.radicado,
+                    year=anio_busqueda,
+                    nitOperador=nit,
+                    expediente=expediente,
+                    trimestre=trimestre,
+                    subido_a_storage=bool(uploaded_urls),
+                    links_imagenes=image_urls,
+                    gsutil_log_images=gs_images,
+                    links_documentos=doc_urls,
+                    gsutil_log_documents=gs_docs,
+                )
+
+                repo.insert_upload_log(log)
 
     ser_service.close_session()
 

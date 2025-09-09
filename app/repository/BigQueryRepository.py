@@ -31,14 +31,18 @@ class Oficio:
 
 @dataclass
 class RpaFursLog:
+    sesion: Optional[str]
     radicado: Optional[str]
     year: Optional[int]
     nitOperador: Optional[str]
     expediente: Optional[str]
     trimestre: Optional[int]
+
     subido_a_storage: bool
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
+    gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
     links_documentos: Optional[List[str]] = field(default_factory=list)  # type: ignore
+    gsutil_log_documents: Optional[List[str]] = field(default_factory=list)  # type: ignore
     ingestion_timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -154,8 +158,8 @@ class BigQueryRepository:
         """
         table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs"
 
-        # Convertimos el dataclass a un diccionario para la inserción
         row_to_insert = {
+            "sesion": log_entry.sesion,
             "radicado": log_entry.radicado,
             "year": log_entry.year,
             "nitOperador": log_entry.nitOperador,
@@ -163,7 +167,9 @@ class BigQueryRepository:
             "trimestre": log_entry.trimestre,
             "subido_a_storage": log_entry.subido_a_storage,
             "links_imagenes": log_entry.links_imagenes,
+            "gsutil_log_images": log_entry.gsutil_log_images,
             "links_documentos": log_entry.links_documentos,
+            "gsutil_log_documents": log_entry.gsutil_log_documents,
             "ingestion_timestamp": log_entry.ingestion_timestamp,
         }
 
@@ -171,9 +177,9 @@ class BigQueryRepository:
             errors = self.bigquery_client.insert_rows_json(table_id, [row_to_insert])
             if not errors:
                 print(
-                    f"✅ Log para radicado {log_entry.radicado}, {log_entry.year}-T{log_entry.trimestre} insertado correctamente."
+                    f"✅ Log para radicado {log_entry.radicado}, {log_entry.year}-T{log_entry.trimestre} insertado."
                 )
             else:
-                print(f"❌ Ocurrieron errores al insertar el log en BigQuery: {errors}")
+                print(f"❌ Errores al insertar el log en BigQuery: {errors}")
         except Exception as e:
-            print(f"❌ Error crítico al intentar insertar log en BigQuery: {e}")
+            print(f"❌ Error crítico al insertar log en BigQuery: {e}")

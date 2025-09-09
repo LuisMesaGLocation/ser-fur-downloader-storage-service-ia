@@ -1,5 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+from typing import List, Tuple
 
 from dotenv import load_dotenv
 from google.api_core import exceptions
@@ -141,6 +142,80 @@ class StorageRepository:
         periodo: int,
         nit: str,
         expediente: str,
+    ) -> Tuple[
+        List[str], List[str]
+    ]:  # <-- CAMBIO 1: El tipo de retorno ahora es una tupla de listas
+        """
+        Sube el contenido de una carpeta de período y devuelve las URLs públicas y las rutas GS.
+        """
+        period_folder_name = f"{periodo}T"
+        period_path = os.path.join(
+            base_download_path,
+            seccion,
+            str(anio),
+            f"{nit}-{expediente}",
+            period_folder_name,
+        )
+
+        if not os.path.isdir(period_path):
+            print(
+                f"Advertencia: La carpeta del período '{period_path}' no existe. No se subirá nada."
+            )
+            return [], []  # <-- CAMBIO 2: Devolver tupla de listas vacías
+
+        upload_tasks: List[Tuple[str, str]] = []
+        for root, _, files in os.walk(period_path):
+            for filename in files:
+                local_file_path = os.path.join(root, filename)
+                destination_blob = os.path.relpath(
+                    local_file_path, base_download_path
+                ).replace("\\", "/")
+                upload_tasks.append((local_file_path, destination_blob))
+
+        if not upload_tasks:
+            print("  -> No se encontraron archivos para subir en este período.")
+            return [], []
+
+        print(
+            f"  -> {len(upload_tasks)} tareas de subida listas. Ejecutando en paralelo..."
+        )
+
+        # --- CAMBIO 3: Preparar listas para recolectar ambos tipos de datos ---
+        uploaded_urls: List[str] = []
+        gsutil_paths: List[str] = []
+
+        def _upload_worker(task: Tuple[str, str]):
+            local_path, destination_path = task
+            try:
+                blob = self.bucket.blob(destination_path)
+                blob.upload_from_filename(local_path)
+                uploaded_urls.append(blob.public_url)
+                gsutil_paths.append(
+                    f"gs://{self.bucket_name}/{destination_path}"
+                )  # Añadir la ruta gsutil
+            except Exception as e:
+                print(
+                    f"    -> ERROR al subir '{local_path}' a '{destination_path}': {e}"
+                )
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            executor.map(_upload_worker, upload_tasks)
+
+        print(
+            f"--- Subida para NIT {nit} completada. Se subieron {len(uploaded_urls)} archivos. ---"
+        )
+
+        return uploaded_urls, gsutil_paths  # <-- CAMBIO 4: Devolver ambas listas
+
+    '''
+    def upload_period_and_images_standalone(
+        self,
+        base_download_path: str,
+        seccion: str,
+        anio: int,
+        periodo: int,
+        nit: str,
+        expediente: str,
     ):
         """
         Sube los archivos de un período específico Y las imágenes generales para un ÚNICO NIT.
@@ -218,3 +293,4 @@ class StorageRepository:
             executor.map(_upload_worker, upload_tasks)
 
         print(f"--- Subida para NIT {nit} completada. ---")
+    '''

@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
+from typing_extensions import List
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -56,7 +57,7 @@ class SerService:
         # Iniciamos Playwright y mantenemos la sesión abierta
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
-        self.browser = self.playwright.chromium.launch(headless=False)
+        self.browser = self.playwright.chromium.launch(headless=True)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
@@ -412,7 +413,7 @@ class SerService:
             )
 
     def descargar_y_clasificar_pdfs(
-        self, nit: str, anio: int, expediente: int, seccion: str
+        self, nit: str, anio: int, expediente: int, seccion: str, trimestres: List[int]
     ):
         """
         Prepara las tablas, toma capturas, itera cada fila para extraer AÑO y TRIMESTRE,
@@ -526,6 +527,30 @@ class SerService:
                         print(
                             f"     -> ERROR procesando fila {i + 1} en Autoliquidación: {e}"
                         )
+            else:
+                # Si no hay tabla, creamos una carpeta para cada trimestre y guardamos
+                # una captura como evidencia de que no se encontraron datos.
+                print("  -> [Autoliquidación] No se encontró la tabla de resultados.")
+                for trimestre in trimestres:
+                    # 1. Construir la ruta del DIRECTORIO para el trimestre.
+                    #    La base es 'base_search_year_path', que es la carpeta del año/expediente.
+                    trimestre_dir_path = os.path.join(
+                        base_search_year_path, f"{trimestre}T"
+                    )
+                    os.makedirs(trimestre_dir_path, exist_ok=True)
+                    created_period_paths.add(trimestre_dir_path)
+
+                    # 2. Definir la ruta del ARCHIVO de la captura dentro de ese nuevo directorio.
+
+                    screenshot_name = f"{nit}-autoliquidaciones.png"
+                    screenshot_path = os.path.join(trimestre_dir_path, screenshot_name)
+
+                    # 3. Guardar la captura.
+                    self.page.screenshot(path=screenshot_path, full_page=True)
+                    print(
+                        f"  -> Carpeta T{trimestre} creada. Captura guardada en: {screenshot_path}"
+                    )
+
         except Exception as e:
             print(f"Ocurrió un error general en la sección de Autoliquidación: {e}")
 
@@ -533,19 +558,31 @@ class SerService:
         try:
             print("\n  -> Navegando a la pestaña 'FURs Generados para Obligación'...")
             self.page.locator('a:has-text("FURs Generados para Obligación")').click()
-            self.page.locator("#tabs-2 .scrollBar").wait_for(
-                state="visible", timeout=10000
-            )
-            print("  -> Tabla de Obligaciones visible.")
+            self.page.wait_for_load_state("networkidle", timeout=1500)
+            print("  -> Pestaña de Obligaciones cargada.")
 
-            scroll_container_2 = self.page.locator("#tabs-2 .scrollBar")
-            if scroll_container_2.is_visible():
-                print("  -> [Obligación] Preparando y tomando captura...")
+            # Ahora, con la página cargada, verificamos de forma segura qué contenido tiene.
+            no_data_locator = self.page.locator(
+                '#tabs-2 p:has-text("No hay datos que mostrar")'
+            )
+
+            # Si el mensaje "No hay datos" NO es visible, significa que SÍ hay una tabla.
+            if not no_data_locator.is_visible():
+                print("  -> [Obligación] Se detectó una tabla con datos.")
+
+                rows = self.page.locator(
+                    "#tabs-2 table.scrollBarProcesada tbody tr:has(td)"
+                )
+                print(f"  -> [Obligación] Procesando {rows.count()} filas...")
+
+                print("  -> [Obligación] Preparando y tomando captura general...")
                 target_header_2 = self.page.locator('#tabs-2 th:has-text("Estado FUR")')
                 if target_header_2.is_visible(timeout=5000):
+                    scroll_container_2 = self.page.locator("#tabs-2 .scrollBar")
                     scroll_container_2.evaluate(
                         "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
                     )
+
                 javascript_a_inyectar = """
                 () => {
                     // 1. Busca el contenedor principal una sola vez
@@ -582,7 +619,7 @@ class SerService:
                     try:
                         row = rows.nth(i)
                         row.scroll_into_view_if_needed()
-                        fecha_str = row.locator("td").nth(7).inner_text(timeout=10000)
+                        fecha_str = row.locator("td").nth(7).inner_text(timeout=500)
                         fecha_obj = datetime.strptime(
                             fecha_str.strip(), "%d/%m/%Y"
                         ).date()
@@ -621,8 +658,62 @@ class SerService:
                         print(
                             f"     -> ERROR procesando fila {i + 1} en Obligación: {e}"
                         )
+            else:
+                for trimestre in trimestres:
+                    # 1. Construir la ruta del DIRECTORIO para el trimestre.
+                    #    La base es 'base_search_year_path', que es la carpeta del año/expediente.
+                    trimestre_dir_path = os.path.join(
+                        base_search_year_path, f"{trimestre}T"
+                    )
+                    os.makedirs(trimestre_dir_path, exist_ok=True)
+                    created_period_paths.add(trimestre_dir_path)
+
+                    # 2. Definir la ruta del ARCHIVO de la captura dentro de ese nuevo directorio.
+
+                    screenshot_name = f"{nit}-obligaciones.png"
+                    screenshot_path = os.path.join(trimestre_dir_path, screenshot_name)
+
+                    # 3. Guardar la captura.
+                    self.page.screenshot(path=screenshot_path, full_page=True)
+                    print(
+                        f"  -> Carpeta T{trimestre} creada. Captura guardada en: {screenshot_path}"
+                    )
+
         except Exception as e:
             print(f"Ocurrió un error general en la sección de Obligaciones: {e}")
+
+        print(
+            "\n--- Verificando y creando carpetas para trimestres sin datos encontrados ---"
+        )
+        for trimestre in trimestres:
+            expected_period_path = os.path.join(base_search_year_path, f"{trimestre}T")
+
+            # Si el path no fue creado en las fases anteriores, significa que no se encontró ningún PDF.
+            if expected_period_path not in created_period_paths:
+                print(
+                    f"  -> No se encontraron datos para T{trimestre}. Creando directorio y evidencia."
+                )
+                os.makedirs(expected_period_path, exist_ok=True)
+
+                # Crear subdirectorios para mantener la consistencia
+                os.makedirs(
+                    os.path.join(expected_period_path, "autoliquidacion"), exist_ok=True
+                )
+                os.makedirs(
+                    os.path.join(expected_period_path, "obligacion"), exist_ok=True
+                )
+
+                # Guardar una captura de pantalla como evidencia de que no hay datos.
+                # Se puede usar la vista actual de la página.
+                screenshot_name = f"{nit}-sin-datos-T{trimestre}.png"
+                screenshot_path = os.path.join(expected_period_path, screenshot_name)
+                self.page.screenshot(path=screenshot_path, full_page=True)
+
+                # Añadir la ruta a created_period_paths para que las imágenes generales se copien después.
+                created_period_paths.add(expected_period_path)
+                print(
+                    f"     -> Carpeta para T{trimestre} creada. Evidencia guardada en: {screenshot_path}"
+                )
 
         # --- FASE 2: COPIA DINÁMICA DE IMÁGENES DE EVIDENCIA ---
         print("\n--- Iniciando copia dinámica de imágenes de evidencia ---")
