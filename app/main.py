@@ -76,7 +76,7 @@ def obtener_fures(
     expedientes_a_procesar: List[Oficio]
     if originData == "database":
         print("📊 Obteniendo datos desde BigQuery...")
-        expedientes_a_procesar = repo.getOficios()
+        expedientes_a_procesar = repo.getOficios(radicado=request.radicado)
 
         if request.nitDesde is not None and request.nitHasta is not None:
             print(
@@ -112,6 +112,7 @@ def obtener_fures(
                 trimestre=item.trimestre,
                 trimestre_asignado=item.trimestre_asignado,
                 year_asignado=item.year_asignado,
+                cod_seven=item.cod_seven,
             )
             for item in request.data
         ]
@@ -175,6 +176,7 @@ def obtener_fures(
             last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
             end_date = last_day_of_previous_month
 
+        end_date = today - timedelta(days=1)
         fecha_inicial_ajustada = get_next_business_day(start_date)
         fecha_final_ajustada = get_previous_business_day(end_date)
         # --- FIN LÓGICA DE FECHAS ---
@@ -247,6 +249,7 @@ def obtener_fures(
                     nitOperador=nit,
                     expediente=expediente,
                     trimestre=trimestre,
+                    cod_seven=sancion.cod_seven,
                     subido_a_storage=bool(uploaded_urls),
                     links_imagenes=image_urls,
                     gsutil_log_images=gs_images,

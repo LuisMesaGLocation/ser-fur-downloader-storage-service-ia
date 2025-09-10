@@ -24,6 +24,7 @@ class Oficio:
     year: Optional[int]
     nitOperador: Optional[str]
     expediente: Optional[str]
+    cod_seven: Optional[str]
     trimestre: Optional[List[int]]
     trimestre_asignado: Optional[List[int]]
     year_asignado: Optional[int]
@@ -37,7 +38,7 @@ class RpaFursLog:
     nitOperador: Optional[str]
     expediente: Optional[str]
     trimestre: Optional[int]
-
+    cod_seven: Optional[str]
     subido_a_storage: bool
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
@@ -114,23 +115,48 @@ class BigQueryRepository:
             print(f"Error al ejecutar la consulta en BigQuery: {e}")
             return []
 
-    def getOficios(self) -> List[Oficio]:
+    def getOficios(self, radicado: Optional[str] = None) -> List[Oficio]:
+        # Base de la consulta sin WHERE ni QUALIFY
         query_sql = """
         SELECT DISTINCT t.radicado,
                 t.year,
                 t.year_asignado,
+                t.ingestion_timestamp,
                 registros.nit AS nitOperador,
                 registros.expediente,
+                registros.cod_seve AS cod_seven,
                 trimestre,
                 trimestre_asignado
-        FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.oficios_prueba AS t
-                 LEFT JOIN
-             UNNEST(t.registros_excel) AS registros;
+        FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.oficios AS t
+                LEFT JOIN
+            UNNEST(t.registros_excel) AS registros
         """
+
+        # Inicializar lista de parámetros y cláusulas WHERE
+        query_params = []
+        where_clauses = []
+
+        # Añadir filtro por radicado si se proporciona
+        if radicado:
+            where_clauses.append("t.radicado = @radicado")
+            query_params.append(
+                bigquery.ScalarQueryParameter("radicado", "STRING", radicado)
+            )
+
+        # Construir la cláusula WHERE si hay condiciones
+        if where_clauses:
+            query_sql += " WHERE " + " AND ".join(where_clauses)
+
+        # Añadir la cláusula QUALIFY al final
+        query_sql += " QUALIFY RANK() OVER (PARTITION BY t.radicado ORDER BY t.ingestion_timestamp DESC) = 1;"
+
+        # Configurar los parámetros de la consulta
+        job_config = bigquery.QueryJobConfig(query_parameters=query_params)
 
         try:
             print("Ejecutando consulta de los oficios.")
-            query_job = self.bigquery_client.query(query_sql)
+            # Ejecutar la consulta con su configuración
+            query_job = self.bigquery_client.query(query_sql, job_config=job_config)
 
             results = [
                 Oficio(
@@ -141,6 +167,7 @@ class BigQueryRepository:
                     expediente=row.expediente,  # type: ignore
                     trimestre=row.trimestre,  # type: ignore
                     trimestre_asignado=row.trimestre_asignado,  # type: ignore
+                    cod_seven=row.cod_seven,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
@@ -156,7 +183,7 @@ class BigQueryRepository:
         """
         Inserta un registro de log en la tabla rpa_furs_logs de BigQuery.
         """
-        table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs"
+        table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs_v2"
 
         row_to_insert = {
             "sesion": log_entry.sesion,
@@ -171,10 +198,11 @@ class BigQueryRepository:
             "links_documentos": log_entry.links_documentos,
             "gsutil_log_documents": log_entry.gsutil_log_documents,
             "ingestion_timestamp": log_entry.ingestion_timestamp,
+            "codigo_seven": log_entry.cod_seven,
         }
 
         try:
-            errors = self.bigquery_client.insert_rows_json(table_id, [row_to_insert])
+            errors = self.bigquery_client.insert_rows_json(table_id, [row_to_insert])  # type: ignore
             if not errors:
                 print(
                     f"✅ Log para radicado {log_entry.radicado}, {log_entry.year}-T{log_entry.trimestre} insertado."

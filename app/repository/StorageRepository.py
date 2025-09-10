@@ -5,6 +5,7 @@ from typing import List, Tuple
 from dotenv import load_dotenv
 from google.api_core import exceptions
 from google.cloud import storage  # type: ignore
+from google.cloud.storage.client import Bucket  # type: ignore
 
 # Cargar las variables de entorno para encontrar las credenciales
 load_dotenv()
@@ -28,9 +29,7 @@ class StorageRepository:
             # La autenticación se maneja automáticamente a través de la variable
             # de entorno GOOGLE_APPLICATION_CREDENTIALS.
             self.storage_client = storage.Client()
-            self.bucket: Bucket = self.storage_client.bucket(
-                self.bucket_name
-            )  # <- 2. Añade la anotación de tipo
+            self.bucket: Bucket = self.storage_client.bucket(self.bucket_name)  # type: ignore
 
             if not self.bucket.exists():  # type: ignore
                 # En un entorno de producción, es mejor que el bucket ya esté creado.
@@ -86,10 +85,10 @@ class StorageRepository:
 
                 try:
                     # 3. Crear un objeto 'blob' en el bucket
-                    blob = self.bucket.blob(destination_blob_name)
+                    blob = self.bucket.blob(destination_blob_name)  # type: ignore
 
                     # 4. Subir el archivo. Por defecto, esto sobrescribe si ya existe.
-                    blob.upload_from_filename(local_file_path)
+                    blob.upload_from_filename(local_file_path)  # type: ignore
 
                 except Exception as e:
                     print(f"  -> ERROR al subir el archivo {filename}: {e}")
@@ -126,8 +125,8 @@ class StorageRepository:
                 )
 
                 try:
-                    blob = self.bucket.blob(destination_blob_name)
-                    blob.upload_from_filename(local_file_path)
+                    blob = self.bucket.blob(destination_blob_name)  # type: ignore
+                    blob.upload_from_filename(local_file_path)  # type: ignore
 
                 except Exception as e:
                     print(f"  -> ERROR al subir el archivo {filename}: {e}")
@@ -187,8 +186,8 @@ class StorageRepository:
         def _upload_worker(task: Tuple[str, str]):
             local_path, destination_path = task
             try:
-                blob = self.bucket.blob(destination_path)
-                blob.upload_from_filename(local_path)
+                blob = self.bucket.blob(destination_path)  # type: ignore
+                blob.upload_from_filename(local_path)  # type: ignore
                 uploaded_urls.append(blob.public_url)
                 gsutil_paths.append(
                     f"gs://{self.bucket_name}/{destination_path}"

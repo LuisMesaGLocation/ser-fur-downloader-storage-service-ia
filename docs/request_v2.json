@@ -1,0 +1,235 @@
+{
+  "seccion": "00001",
+  "data": [
+    {
+      "radicado": "252137879",
+      "year": null,
+      "cod_seven": "96",
+      "year_asignado": "2024",
+      "nitOperador": "900410244",
+      "expediente": "96003949",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900416718",
+      "expediente": "96003232",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900487204",
+      "expediente": "96003325",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900524666",
+      "expediente": "96001063",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900551918",
+      "expediente": "96002072",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900586451",
+      "expediente": "96001509",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900590470",
+      "expediente": "96004898",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900772593",
+      "expediente": "96005431",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "900928693",
+      "expediente": "96003345",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901062199",
+      "expediente": "96003522",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901154951",
+      "expediente": "96004199",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901184414",
+      "expediente": "96004612",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901240753",
+      "expediente": "96004447",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901259587",
+      "expediente": "96004901",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901267163",
+      "expediente": "96006140",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901277316",
+      "expediente": "96005239",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901330791",
+      "expediente": "96005049",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901332024",
+      "expediente": "96005016",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901410065",
+      "expediente": "96005951",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901419135",
+      "expediente": "96006095",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901497770",
+      "expediente": "96006344",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901537133",
+      "expediente": "96007071",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    },
+    {
+      "radicado": "252137879",
+      "cod_seven": "96",
+      "year": null,
+      "year_asignado": "2024",
+      "nitOperador": "901758957",
+      "expediente": "96008447",
+      "trimestre": [],
+      "trimestre_asignado": [1, 2, 3, 4]
+    }
+  ]
+}
