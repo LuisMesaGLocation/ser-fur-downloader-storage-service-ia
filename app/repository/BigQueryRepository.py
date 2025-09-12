@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from google.cloud import bigquery
@@ -40,13 +39,11 @@ class RpaFursLog:
     trimestre: Optional[int]
     cod_seven: Optional[str]
     subido_a_storage: bool
+    ingestion_timestamp: str
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
     links_documentos: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_documents: Optional[List[str]] = field(default_factory=list)  # type: ignore
-    ingestion_timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
 
 
 class BigQueryRepository:
@@ -138,14 +135,14 @@ class BigQueryRepository:
 
         # Añadir filtro por radicado si se proporciona
         if radicado:
-            where_clauses.append("t.radicado = @radicado")
-            query_params.append(
+            where_clauses.append("t.radicado = @radicado")  # type: ignore
+            query_params.append(  # type: ignore
                 bigquery.ScalarQueryParameter("radicado", "STRING", radicado)
             )
 
         # Construir la cláusula WHERE si hay condiciones
         if where_clauses:
-            query_sql += " WHERE " + " AND ".join(where_clauses)
+            query_sql += " WHERE " + " AND ".join(where_clauses)  # type: ignore
 
         # Añadir la cláusula QUALIFY al final
         query_sql += " QUALIFY RANK() OVER (PARTITION BY t.radicado ORDER BY t.ingestion_timestamp DESC) = 1;"
@@ -183,7 +180,7 @@ class BigQueryRepository:
         """
         Inserta un registro de log en la tabla rpa_furs_logs de BigQuery.
         """
-        table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs_v2"
+        table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs"
 
         row_to_insert = {
             "sesion": log_entry.sesion,

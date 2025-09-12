@@ -429,7 +429,7 @@ class SerService:
         )
 
         # --- FASE 1: PREPARACIÓN Y CAPTURA DE PANTALLAS ---
-        created_period_paths = set()
+        created_period_paths = set()  # type: ignore
         base_search_year_path = os.path.join(
             self.download_path, seccion, str(anio), f"{nit}-{expediente}"
         )

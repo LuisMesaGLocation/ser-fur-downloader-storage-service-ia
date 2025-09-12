@@ -1,6 +1,6 @@
 import os
 import shutil
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -65,6 +65,7 @@ def obtener_fures(
     ),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    request_ingestion_timestamp = datetime.now(timezone.utc).isoformat()
     print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
     print(f"UID del usuario: {current_user.get('uid')}")
 
@@ -125,7 +126,7 @@ def obtener_fures(
         return List[Expediente]
 
     radicado_principal = expedientes_a_procesar[0].radicado
-    seccion_final: str = request.seccion
+    seccion_final: str = request.seccion  # type: ignore
     if radicado_principal:
         seccion_final = f"{request.seccion}-{radicado_principal}"
 
@@ -255,6 +256,7 @@ def obtener_fures(
                     gsutil_log_images=gs_images,
                     links_documentos=doc_urls,
                     gsutil_log_documents=gs_docs,
+                    ingestion_timestamp=request_ingestion_timestamp,
                 )
 
                 repo.insert_upload_log(log)
