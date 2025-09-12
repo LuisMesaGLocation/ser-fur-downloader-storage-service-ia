@@ -68,7 +68,7 @@ def obtener_fures(
     request_ingestion_timestamp = datetime.now(timezone.utc).isoformat()
     print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
     print(f"UID del usuario: {current_user.get('uid')}")
-
+    logs_generados: List[RpaFursLog] = []
     download_folder = ser_service.download_path
     if os.path.exists(download_folder):
         print(f"Limpiando directorio de descargas principal: {download_folder}")
@@ -260,21 +260,8 @@ def obtener_fures(
                 )
 
                 repo.insert_upload_log(log)
+                logs_generados.append(log)
 
     ser_service.close_session()
 
-    # La respuesta final sigue siendo la misma, convirtiendo a Expediente
-    respuesta_final: List[Expediente] = []
-    for oficio in expedientes_a_procesar:
-        if oficio.nitOperador and oficio.expediente:
-            try:
-                respuesta_final.append(
-                    Expediente(
-                        nitOperador=int(oficio.nitOperador),
-                        expediente=int(oficio.expediente),
-                    )
-                )
-            except (ValueError, TypeError):
-                pass
-
-    return respuesta_final
+    return logs_generados
