@@ -37,8 +37,8 @@ gcloud run deploy "$SERVICE_NAME" \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
-  --cpu 1 \
-  --memory 2048Mi \
+  --cpu 5 \
+  --memory 5000Mi \
   --timeout 3600 \
   --set-env-vars "SER_URL=https://ser.mintic.gov.co/" \
   --set-env-vars "SER_USER=servinf135121" \
