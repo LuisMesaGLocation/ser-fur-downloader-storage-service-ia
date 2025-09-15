@@ -1,0 +1,25 @@
+[
+  {
+    "sesion": "00001-test-252137879",
+    "radicado": "252137879",
+    "year": 2024,
+    "nitOperador": "900410244",
+    "expediente": "96003949",
+    "trimestre": 1,
+    "cod_seven": "96",
+    "subido_a_storage": true,
+    "ingestion_timestamp": "2024-08-15T20:30:00.123Z",
+    "links_imagenes": [
+      "https://storage.googleapis.com/contraprestaciones-pro-ser/00001-test-252137879/2024/900410244-96003949/1T/900410244-autoliquidaciones.png"
+    ],
+    "gsutil_log_images": [
+      "gs://contraprestaciones-pro-ser/00001-test-252137879/2024/900410244-96003949/1T/900410244-autoliquidaciones.png"
+    ],
+    "links_documentos": [
+      "https://storage.googleapis.com/contraprestaciones-pro-ser/00001-test-252137879/2024/900410244-96003949/1T/autoliquidacion/FUR_96003949_20241.pdf"
+    ],
+    "gsutil_log_documents": [
+      "gs://contraprestaciones-pro-ser/00001-test-252137879/2024/900410244-96003949/1T/autoliquidacion/FUR_96003949_20241.pdf"
+    ]
+  }
+]

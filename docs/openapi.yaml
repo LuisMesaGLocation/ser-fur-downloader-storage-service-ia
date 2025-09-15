@@ -1,0 +1,264 @@
+openapi: 3.0.3
+info:
+  title: Servicio de Descarga FURES
+  description: >
+    Una API para interactuar con los datos de FURES en BigQuery y descargar los documentos asociados desde el SER.
+
+    Internamente, este servicio procesa los expedientes, almacena los archivos (PDFs y evidencias) en un bucket de Google Cloud Storage y registra un log detallado de cada operación en una tabla de BigQuery.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Servidor de desarrollo local
+  - url: https://ser-furs-downloader-storage-service-120048616777.us-central1.run.app
+    description: Servidor de producción en Cloud Run
+
+tags:
+  - name: FURES
+    description: Operaciones relacionadas con la descarga y procesamiento de FURES.
+
+paths:
+  /:
+    post:
+      tags:
+        - FURES
+      summary: Inicia el proceso de descarga y almacenamiento de FURES
+      description: >
+        Recibe una lista de expedientes, los procesa de forma paralela para descargar
+        los PDFs y evidencias desde el SER, los sube a Google Cloud Storage y
+        registra el resultado en BigQuery.
+      operationId: obtener_fures
+      security:
+        - FirebaseBearerAuth: []
+      parameters:
+        - name: originData
+          in: query
+          description: "Define el origen de los datos. Usar 'database' para leer desde BigQuery o dejar en blanco para usar los datos enviados en el cuerpo de la petición."
+          required: false
+          schema:
+            type: string
+            enum: [database]
+      requestBody:
+        description: Datos de la solicitud para procesar los FURES.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuresRequest'
+            examples:
+              default:
+                summary: "Ejemplo de una solicitud para procesar FURES"
+                value:
+                    $ref: './fures_request.json'
+      responses:
+        '200':
+          description: Procesamiento completado exitosamente. Devuelve una lista de los logs generados para cada trimestre procesado.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 5000
+                items:
+                  $ref: '#/components/schemas/RpaFursLog'
+              examples:
+                default:
+                  summary: "Ejemplo de una respuesta exitosa"
+                  value:
+                    $ref: './fures_response.json'
+        '400':
+          description: Solicitud inválida. Ocurre si `originData` no es 'database' y el campo 'data' no se proporciona en el cuerpo.
+        '401':
+          description: No autorizado. El token de autenticación (Bearer) es inválido, ha expirado o no se ha proporcionado.
+        '500':
+          description: Error interno del servidor.
+
+components:
+  schemas:
+    FuresDataItem:
+      type: object
+      required:
+        - nitOperador
+        - expediente
+        - radicado
+        - year_asignado
+        - trimestre_asignado
+      properties:
+        nitOperador:
+          type: string
+          description: NIT del operador.
+          example: "900410244"
+          maxLength: 15
+          pattern: '^[0-9]+$'
+        expediente:
+          type: string
+          description: Número del expediente.
+          example: "96003949"
+          maxLength: 15
+          pattern: '^[0-9]+$'
+        radicado:
+          type: string
+          description: Número del radicado asociado.
+          example: "252137879"
+          maxLength: 20
+          pattern: '^[0-9]+$'
+        year:
+          type: integer
+          description: Año del FURS (opcional).
+          format: int32
+          minimum: 2000
+          maximum: 2100
+        year_asignado:
+          type: integer
+          description: Año asignado para la búsqueda.
+          example: 2024
+          format: int32
+          minimum: 2000
+          maximum: 2100
+        trimestre:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 4
+          maxItems: 4
+          description: Lista de trimestres a procesar (opcional).
+        trimestre_asignado:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 4
+          maxItems: 4
+          description: Lista de trimestres asignados para procesar.
+          example: [1, 2, 3, 4]
+        cod_seven:
+          type: string
+          description: Código Seven asociado (opcional).
+          example: "96"
+          maxLength: 10
+          pattern: '^[a-zA-Z0-9]+$'
+      additionalProperties: false
+
+    FuresRequest:
+      type: object
+      properties:
+        token_ser:
+          type: string
+          description: (Opcional) Token de cookie de autenticación para el SER. Si no se provee, se usará login por credenciales.
+          maxLength: 4096
+          pattern: '^.+$'
+        year:
+          type: integer
+          description: Año general para la búsqueda si no se especifica en cada item.
+          example: 2024
+          format: int32
+          minimum: 2000
+          maximum: 2100
+        seccion:
+          type: string
+          description: Nombre base para la carpeta en GCS donde se guardarán los archivos.
+          example: "rpa-descargas-test"
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9_-]+$'
+        radicado:
+          type: string
+          description: Radicado a consultar si `originData` es 'database'.
+          example: "252137879"
+          maxLength: 20
+          pattern: '^[0-9]+$'
+        data:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/FuresDataItem'
+          description: Lista de expedientes a procesar. Requerido si `originData` no es 'database'.
+      additionalProperties: false
+
+    RpaFursLog:
+      type: object
+      properties:
+        sesion:
+          type: string
+          description: Identificador único de la sesión de ejecución.
+          example: "rpa-descargas-test-252137879"
+          maxLength: 150
+          pattern: '^[a-zA-Z0-9_-]+$'
+        radicado:
+          type: string
+          description: Número del radicado procesado.
+          example: "252137879"
+          maxLength: 20
+          pattern: '^[0-9]+$'
+        year:
+          type: integer
+          description: Año del período procesado.
+          example: 2024
+        nitOperador:
+          type: string
+          description: NIT del operador procesado.
+          example: "900410244"
+          maxLength: 15
+          pattern: '^[0-9]+$'
+        expediente:
+          type: string
+          description: Expediente procesado.
+          example: "96003949"
+          maxLength: 15
+          pattern: '^[0-9]+$'
+        trimestre:
+          type: integer
+          description: Trimestre procesado.
+          example: 1
+        cod_seven:
+          type: string
+          description: Código Seven asociado.
+          example: "96"
+          maxLength: 10
+          pattern: '^[a-zA-Z0-9]+$'
+        subido_a_storage:
+          type: boolean
+          description: Indica si se subieron archivos a Google Cloud Storage para este período.
+        ingestion_timestamp:
+          type: string
+          format: date-time
+          description: Marca de tiempo de cuándo se procesó la solicitud.
+        links_imagenes:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+          description: URLs públicas de las imágenes de evidencia subidas a GCS.
+        gsutil_log_images:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            maxLength: 2048
+            pattern: '^gs://.+$'
+          description: Rutas `gsutil` de las imágenes de evidencia en GCS.
+        links_documentos:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+          description: URLs públicas de los documentos PDF subidos a GCS.
+        gsutil_log_documents:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            maxLength: 2048
+            pattern: '^gs://.+$'
+          description: Rutas `gsutil` de los documentos PDF en GCS.
+
+  securitySchemes:
+    FirebaseBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Autenticación mediante un ID Token de Firebase. Proporciona el token en el
+        encabezado `Authorization` con el prefijo `Bearer `.
