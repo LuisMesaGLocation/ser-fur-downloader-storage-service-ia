@@ -27,6 +27,8 @@ class Oficio:
     trimestre: Optional[List[int]]
     trimestre_asignado: Optional[List[int]]
     year_asignado: Optional[int]
+    radicado_informe: Optional[str]
+    fecha_radicado_informe: Optional[str]
 
 
 @dataclass
@@ -40,6 +42,8 @@ class RpaFursLog:
     cod_seven: Optional[str]
     subido_a_storage: bool
     ingestion_timestamp: str
+    radicado_informe: Optional[str]
+    fecha_radicado_informe: Optional[str]
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
     links_documentos: Optional[List[str]] = field(default_factory=list)  # type: ignore
@@ -123,7 +127,9 @@ class BigQueryRepository:
                 registros.expediente,
                 registros.cod_seve AS cod_seven,
                 trimestre,
-                trimestre_asignado
+                trimestre_asignado,
+                registros.radicado_informe,
+                registros.fecha_radicado_informe
         FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.oficios AS t
                 LEFT JOIN
             UNNEST(t.registros_excel) AS registros
@@ -165,6 +171,8 @@ class BigQueryRepository:
                     trimestre=row.trimestre,  # type: ignore
                     trimestre_asignado=row.trimestre_asignado,  # type: ignore
                     cod_seven=row.cod_seven,  # type: ignore
+                    radicado_informe=row.radicado_informe,  # type: ignore
+                    fecha_radicado_informe=row.fecha_radicado_informe,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
@@ -196,6 +204,8 @@ class BigQueryRepository:
             "gsutil_log_documents": log_entry.gsutil_log_documents,
             "ingestion_timestamp": log_entry.ingestion_timestamp,
             "codigo_seven": log_entry.cod_seven,
+            "radicado_informe": log_entry.radicado_informe,
+            "fecha_radicado_informe": log_entry.fecha_radicado_informe,
         }
 
         try:

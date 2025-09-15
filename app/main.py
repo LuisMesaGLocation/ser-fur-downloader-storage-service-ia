@@ -164,6 +164,8 @@ def procesar_expediente_worker(
                     links_documentos=doc_urls,
                     gsutil_log_documents=gs_docs,
                     ingestion_timestamp=request_ingestion_timestamp,
+                    radicado_informe=sancion.radicado_informe,
+                    fecha_radicado_informe=sancion.fecha_radicado_informe,
                 )
                 bq_repo.insert_upload_log(log)
                 logs_generados_hilo.append(log)

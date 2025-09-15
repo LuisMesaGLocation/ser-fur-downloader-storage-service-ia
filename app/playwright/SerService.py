@@ -1,6 +1,7 @@
 import os
 import shutil
 from datetime import date, datetime
+from typing import Set
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -429,7 +430,7 @@ class SerService:
         )
 
         # --- FASE 1: PREPARACIÓN Y CAPTURA DE PANTALLAS ---
-        created_period_paths = set()  # type: ignore
+        created_period_paths: Set[str] = set()
         base_search_year_path = os.path.join(
             self.download_path, seccion, str(anio), f"{nit}-{expediente}"
         )
