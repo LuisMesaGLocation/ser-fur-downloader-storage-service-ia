@@ -5,10 +5,14 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security.http import HTTPBearer
+from pydantic.main import BaseModel
 from typing_extensions import Any, Dict, Optional
 
 from app.config.cors import configure_cors
 from app.dto.FuresRequest import FuresRequest
+from app.gen_pliegos.service import Service as PliegoService
 from app.playwright.SerService import SerService
 from app.repository.BigQueryRepository import BigQueryRepository, Oficio, RpaFursLog
 from app.repository.StorageRepository import StorageRepository
@@ -22,6 +26,14 @@ from app.utils.fecha_habil_colombia import (
 
 # 1. Se añaden las importaciones necesarias para la paralelización.
 # (ThreadPoolExecutor, as_completed) - ya están arriba
+
+security = HTTPBearer()
+
+
+class FinalResponse(BaseModel):
+    furs_logs: List[RpaFursLog]
+    pliegos_results: List[Dict[str, Any]]
+
 
 app = FastAPI(
     title="Servicio de Descarga FURES",
@@ -192,7 +204,7 @@ def read_root(current_user: Dict[str, Any] = Depends(get_current_user)):
 
 @app.post(
     "/",
-    response_model=List[RpaFursLog],
+    response_model=FinalResponse,
     summary="Obtener los últimos 10 registros de FURES",
     tags=["FURES"],
 )
@@ -202,8 +214,9 @@ def obtener_fures(
         None,
         description="Origen de los datos: 'database' para BigQuery, otro valor o None para usar datos del body",
     ),
+    auth_credentials: HTTPAuthorizationCredentials = Depends(security),
     current_user: Dict[str, Any] = Depends(get_current_user),
-) -> List[RpaFursLog]:
+) -> FinalResponse:
     request_ingestion_timestamp = datetime.now(timezone.utc).isoformat()
     print(f"✅ Petición de {current_user.get('email')} recibida.")
 
@@ -224,7 +237,7 @@ def obtener_fures(
 
     if not expedientes_a_procesar:
         print("No hay expedientes para procesar. Finalizando.")
-        return []
+        return FinalResponse(furs_logs=[], pliegos_results=[])
 
     radicado_principal = expedientes_a_procesar[0].radicado
     base_seccion = request.seccion or "rpa-descargas"
@@ -269,7 +282,29 @@ def obtener_fures(
     print(
         f"✅ Procesamiento paralelo completado. Se generaron {len(logs_generados_total)} logs."
     )
-    return logs_generados_total
+    pliegos_responses: List[Dict[str, Any]] = []
+    if logs_generados_total:
+        token: Optional[str] = (
+            auth_credentials.credentials if auth_credentials else None
+        )
+        sesiones_unicas = {log.sesion for log in logs_generados_total if log.sesion}
 
+        if sesiones_unicas:
+            print(
+                f"Se encontraron {len(sesiones_unicas)} sesiones únicas para generar pliegos."
+            )
+            pliego_service = PliegoService()
+            for sesion in sesiones_unicas:
+                response = pliego_service.get_pliegos(cod_sesion=sesion, token=token)
+                if response is not None:
+                    pliegos_responses.append(response)
 
-# --- FIN DE CAMBIOS ---
+            print(f"Se generaron {len(pliegos_responses)} pliegos.")
+        else:
+            print(
+                "🧐 No se encontraron sesiones únicas en los logs generados. No se generarán pliegos."
+            )
+
+    return FinalResponse(
+        furs_logs=logs_generados_total, pliegos_results=pliegos_responses
+    )
