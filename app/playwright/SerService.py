@@ -58,7 +58,7 @@ class SerService:
         # Iniciamos Playwright y mantenemos la sesión abierta
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
-        self.browser = self.playwright.chromium.launch(headless=False)
+        self.browser = self.playwright.chromium.launch(headless=True)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
