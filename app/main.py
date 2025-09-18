@@ -178,6 +178,8 @@ def procesar_expediente_worker(
                     ingestion_timestamp=request_ingestion_timestamp,
                     radicado_informe=sancion.radicado_informe,
                     fecha_radicado_informe=sancion.fecha_radicado_informe,
+                    servicio=sancion.servicio,
+                    codigo_servicio=sancion.codigoServicio,
                 )
                 bq_repo.insert_upload_log(log)
                 logs_generados_hilo.append(log)
@@ -228,7 +230,7 @@ def obtener_fures(
 
     # La lógica para obtener la lista de expedientes a procesar no cambia.
     if originData == "database":
-        expedientes_a_procesar = repo_lectura.getOficios(radicado=request.radicado)
+        expedientes_a_procesar = repo_lectura.getOficios(sesion=request.seccion)
         # ... (lógica de filtrado si aplica)
     else:
         if not request.data:
@@ -239,11 +241,12 @@ def obtener_fures(
         print("No hay expedientes para procesar. Finalizando.")
         return FinalResponse(furs_logs=[], pliegos_results=[])
 
-    radicado_principal = expedientes_a_procesar[0].radicado
+    sesion_final_final: str = expedientes_a_procesar[0].sesion or ""
+    """radicado_principal = expedientes_a_procesar[0].radicado
     base_seccion = request.seccion or "rpa-descargas"
     seccion_final = (
         f"{base_seccion}-{radicado_principal}" if radicado_principal else base_seccion
-    )
+    )"""
 
     # --- INICIO DE CAMBIOS EN EJECUCIÓN ---
 
@@ -260,7 +263,7 @@ def obtener_fures(
                 procesar_expediente_worker,
                 sancion,
                 request,
-                seccion_final,
+                sesion_final_final,
                 request_ingestion_timestamp,
             ): sancion
             for sancion in expedientes_a_procesar

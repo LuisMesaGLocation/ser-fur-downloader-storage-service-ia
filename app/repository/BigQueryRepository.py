@@ -29,6 +29,9 @@ class Oficio:
     year_asignado: Optional[int]
     radicado_informe: Optional[str]
     fecha_radicado_informe: Optional[str]
+    codigoServicio: Optional[int]
+    servicio: Optional[str]
+    sesion: Optional[str]
 
 
 @dataclass
@@ -44,6 +47,8 @@ class RpaFursLog:
     ingestion_timestamp: str
     radicado_informe: Optional[str]
     fecha_radicado_informe: Optional[str]
+    servicio: Optional[str]
+    codigo_servicio: Optional[int]
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
     links_documentos: Optional[List[str]] = field(default_factory=list)  # type: ignore
@@ -116,7 +121,7 @@ class BigQueryRepository:
             print(f"Error al ejecutar la consulta en BigQuery: {e}")
             return []
 
-    def getOficios(self, radicado: Optional[str] = None) -> List[Oficio]:
+    def getOficios(self, sesion: Optional[str] = None) -> List[Oficio]:
         # Base de la consulta sin WHERE ni QUALIFY
         query_sql = """
         SELECT DISTINCT t.radicado,
@@ -129,10 +134,16 @@ class BigQueryRepository:
                 trimestre,
                 trimestre_asignado,
                 registros.radicado_informe,
-                registros.fecha_radicado_informe
+                registros.fecha_radicado_informe,
+                BDU.Cod_Servicio   AS codigoServicio,
+                BDU.Servicio       AS servicio,
+                t.sesion
         FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.oficios AS t
                 LEFT JOIN
             UNNEST(t.registros_excel) AS registros
+            INNER JOIN `mintic-models-dev`.contraprestaciones_pro.VW_EXPEDIENTES_BDU AS BDU
+                       ON CAST(registros.nit AS INT64) = BDU.Identificacion
+                           AND CAST(registros.expediente AS INT64) = BDU.Expediente
         """
 
         # Inicializar lista de parámetros y cláusulas WHERE
@@ -140,10 +151,10 @@ class BigQueryRepository:
         where_clauses = []
 
         # Añadir filtro por radicado si se proporciona
-        if radicado:
-            where_clauses.append("t.radicado = @radicado")  # type: ignore
+        if sesion:
+            where_clauses.append("t.sesion = @sesion")  # type: ignore
             query_params.append(  # type: ignore
-                bigquery.ScalarQueryParameter("radicado", "STRING", radicado)
+                bigquery.ScalarQueryParameter("sesion", "STRING", sesion)
             )
 
         # Construir la cláusula WHERE si hay condiciones
@@ -173,6 +184,9 @@ class BigQueryRepository:
                     cod_seven=row.cod_seven,  # type: ignore
                     radicado_informe=row.radicado_informe,  # type: ignore
                     fecha_radicado_informe=row.fecha_radicado_informe,  # type: ignore
+                    codigoServicio=row.codigoServicio,  # type: ignore
+                    servicio=row.servicio,  # type: ignore
+                    sesion=row.sesion,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
@@ -206,6 +220,8 @@ class BigQueryRepository:
             "codigo_seven": log_entry.cod_seven,
             "radicado_informe": log_entry.radicado_informe,
             "fecha_radicado_informe": log_entry.fecha_radicado_informe,
+            "codigo_servicio": log_entry.codigo_servicio,
+            "servicio": log_entry.servicio,
         }
 
         try:
