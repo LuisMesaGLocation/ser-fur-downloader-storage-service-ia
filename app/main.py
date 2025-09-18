@@ -118,6 +118,8 @@ def procesar_expediente_worker(
 
         # Cada hilo inicia sesión en su propio navegador.
         ser_service.login()
+        # nit = "901410065"
+        # expediente_str = "96005951"
 
         ser_service.buscar_data(
             nitOperador=nit,
@@ -253,7 +255,7 @@ def obtener_fures(
     # 5. Se reemplaza el bucle 'for' por el ejecutor de hilos.
     logs_generados_total: List[RpaFursLog] = []
     # Este número debe coincidir con las CPUs asignadas en deploy.sh
-    MAX_WORKERS = 4
+    MAX_WORKERS = 1
 
     print(f"🚀 Iniciando procesamiento paralelo con hasta {MAX_WORKERS} workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:

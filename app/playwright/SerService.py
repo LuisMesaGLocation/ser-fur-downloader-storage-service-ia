@@ -58,7 +58,7 @@ class SerService:
         # Iniciamos Playwright y mantenemos la sesión abierta
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
-        self.browser = self.playwright.chromium.launch(headless=True)
+        self.browser = self.playwright.chromium.launch(headless=False)
 
         context = self.browser.new_context(
             viewport={"width": 1600, "height": 900}, accept_downloads=True
@@ -485,10 +485,37 @@ class SerService:
                     "#tabs-1 table.scrollBarProcesada tbody tr:has(td)"
                 )
                 print(f"  -> [Autoliquidación] Procesando {rows.count()} filas...")
+
+                headers = self.page.locator(
+                    "#tabs-1 table.scrollBarProcesada tbody tr:first-child th"
+                )
+                estado_index = -1
+                for i in range(headers.count()):
+                    if "Estado FUR" in headers.nth(i).inner_text():
+                        estado_index = i
+                        print(
+                            f"  -> [Autoliquidación] Columna 'Estado FUR' encontrada en el índice {i}"
+                        )
+                        break
+                # --- FIN DEL REEMPLAZO ---
+
                 for i in range(rows.count()):
                     try:
                         row = rows.nth(i)
                         row.scroll_into_view_if_needed()
+                        if estado_index != -1:
+                            estado_text = (
+                                row.locator("td")
+                                .nth(estado_index)
+                                .inner_text(timeout=3000)
+                                .strip()
+                                .lower()
+                            )
+                            if estado_text == "vencido":
+                                print(
+                                    f"     -> Fila {i + 1}: Omitiendo (Autoliquidación), estado es 'Vencido'."
+                                )
+                                continue
                         fecha_str = row.locator("td").nth(6).inner_text(timeout=10000)
                         fecha_obj = datetime.strptime(
                             fecha_str.strip(), "%d/%m/%Y"
@@ -578,6 +605,7 @@ class SerService:
 
                 print("  -> [Obligación] Preparando y tomando captura general...")
                 target_header_2 = self.page.locator('#tabs-2 th:has-text("Estado FUR")')
+
                 if target_header_2.is_visible(timeout=5000):
                     scroll_container_2 = self.page.locator("#tabs-2 .scrollBar")
                     scroll_container_2.evaluate(
@@ -615,11 +643,40 @@ class SerService:
                 rows = self.page.locator(
                     "#tabs-2 table.scrollBarProcesada tbody tr:has(td)"
                 )
+                headers_obli = self.page.locator(
+                    "#tabs-2 table.scrollBarProcesada tbody tr:first-child th"
+                )
+
+                print("  -> [Obligación] Encabezados encontrados:")
+                for h_idx in range(headers_obli.count()):
+                    print(f"    - {headers_obli.nth(h_idx).inner_text()}")
+                estado_fur_index_obli = -1
+                for h_idx in range(headers_obli.count()):
+                    if "Estado FUR" in headers_obli.nth(h_idx).inner_text():
+                        estado_fur_index_obli = h_idx
+                        print(
+                            f"  -> [Obligación] Columna 'Estado FUR' encontrada en el índice {estado_fur_index_obli}"
+                        )
+                        break
+
                 print(f"  -> [Obligación] Procesando {rows.count()} filas...")
                 for i in range(rows.count()):
                     try:
                         row = rows.nth(i)
                         row.scroll_into_view_if_needed()
+                        if estado_fur_index_obli != -1:
+                            estado_text = (
+                                row.locator("td")
+                                .nth(estado_fur_index_obli)
+                                .inner_text(timeout=3000)
+                                .strip()
+                                .lower()
+                            )
+                            if estado_text == "vencido":
+                                print(
+                                    f"     -> Fila {i + 1}: Omitiendo descarga, estado es 'Vencido'."
+                                )
+                                continue
                         fecha_str = row.locator("td").nth(7).inner_text(timeout=500)
                         fecha_obj = datetime.strptime(
                             fecha_str.strip(), "%d/%m/%Y"
