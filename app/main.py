@@ -182,6 +182,7 @@ def procesar_expediente_worker(
                     fecha_radicado_informe=sancion.fecha_radicado_informe,
                     servicio=sancion.servicio,
                     codigo_servicio=sancion.codigoServicio,
+                    expediente_habilitado=sancion.expedienteHabilitado,
                 )
                 bq_repo.insert_upload_log(log)
                 logs_generados_hilo.append(log)

@@ -32,6 +32,7 @@ class Oficio:
     codigoServicio: Optional[int]
     servicio: Optional[str]
     sesion: Optional[str]
+    expedienteHabilitado: Optional[str]
 
 
 @dataclass
@@ -49,6 +50,7 @@ class RpaFursLog:
     fecha_radicado_informe: Optional[str]
     servicio: Optional[str]
     codigo_servicio: Optional[int]
+    expediente_habilitado: Optional[str]
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
     links_documentos: Optional[List[str]] = field(default_factory=list)  # type: ignore
@@ -137,6 +139,7 @@ class BigQueryRepository:
                 registros.fecha_radicado_informe,
                 BDU.Cod_Servicio   AS codigoServicio,
                 BDU.Servicio       AS servicio,
+                BDU.EXP_HABILITADO AS expedienteHabilitado,
                 t.sesion
         FROM `mintic-models-dev`.SANCIONES_DIVIC_PRO.oficios AS t
                 LEFT JOIN
@@ -187,6 +190,7 @@ class BigQueryRepository:
                     codigoServicio=row.codigoServicio,  # type: ignore
                     servicio=row.servicio,  # type: ignore
                     sesion=row.sesion,  # type: ignore
+                    expediente_habilitado=row.expedienteHabilitado,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
@@ -222,6 +226,7 @@ class BigQueryRepository:
             "fecha_radicado_informe": log_entry.fecha_radicado_informe,
             "codigo_servicio": log_entry.codigo_servicio,
             "servicio": log_entry.servicio,
+            "expediente_habilitado": log_entry.expediente_habilitado,
         }
 
         try:
