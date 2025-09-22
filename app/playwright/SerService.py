@@ -511,11 +511,12 @@ class SerService:
                                 .strip()
                                 .lower()
                             )
-                            if estado_text == "vencido":
+                            if estado_text in ["vencido", "anulado"]:
                                 print(
-                                    f"     -> Fila {i + 1}: Omitiendo (Autoliquidación), estado es 'Vencido'."
+                                    f"     -> Fila {i + 1}: Omitiendo (Autoliquidación), estado es '{estado_text.capitalize()}'."
                                 )
                                 continue
+
                         fecha_str = row.locator("td").nth(6).inner_text(timeout=10000)
                         fecha_obj = datetime.strptime(
                             fecha_str.strip(), "%d/%m/%Y"
@@ -672,11 +673,12 @@ class SerService:
                                 .strip()
                                 .lower()
                             )
-                            if estado_text == "vencido":
+                            if estado_text in ["vencido", "anulado"]:
                                 print(
-                                    f"     -> Fila {i + 1}: Omitiendo descarga, estado es 'Vencido'."
+                                    f"     -> Fila {i + 1}: Omitiendo descarga, estado es '{estado_text.capitalize()}'."
                                 )
                                 continue
+
                         fecha_str = row.locator("td").nth(7).inner_text(timeout=500)
                         fecha_obj = datetime.strptime(
                             fecha_str.strip(), "%d/%m/%Y"

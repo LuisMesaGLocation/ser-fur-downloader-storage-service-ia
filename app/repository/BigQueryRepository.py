@@ -190,7 +190,7 @@ class BigQueryRepository:
                     codigoServicio=row.codigoServicio,  # type: ignore
                     servicio=row.servicio,  # type: ignore
                     sesion=row.sesion,  # type: ignore
-                    expediente_habilitado=row.expedienteHabilitado,  # type: ignore
+                    expedienteHabilitado=row.expedienteHabilitado,  # type: ignore
                 )
                 for row in query_job.result()  # type: ignore
             ]
