@@ -128,7 +128,7 @@ def procesar_expediente_worker(
             fechaFinal=fecha_final_ajustada,
         )
 
-        ser_service.descargar_y_clasificar_pdfs(
+        ser_service.descargar_y_clasificar_furs_paginado(
             nit=nit,
             anio=anio_busqueda,
             expediente=int(expediente_str),
@@ -200,13 +200,6 @@ def procesar_expediente_worker(
 # --- FIN DE CAMBIOS EN LÓGICA DE WORKER ---
 
 
-@app.get("/hola")
-def read_root(current_user: Dict[str, Any] = Depends(get_current_user)):
-    print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
-    print(f"UID del usuario: {current_user.get('uid')}")
-    return {"Hello": "World"}
-
-
 @app.post(
     "/",
     response_model=FinalResponse,
@@ -256,7 +249,7 @@ def obtener_fures(
     # 5. Se reemplaza el bucle 'for' por el ejecutor de hilos.
     logs_generados_total: List[RpaFursLog] = []
     # Este número debe coincidir con las CPUs asignadas en deploy.sh
-    MAX_WORKERS = 6
+    MAX_WORKERS = 1
 
     print(f"🚀 Iniciando procesamiento paralelo con hasta {MAX_WORKERS} workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -314,3 +307,10 @@ def obtener_fures(
     return FinalResponse(
         furs_logs=logs_generados_total, pliegos_results=pliegos_responses
     )
+
+
+@app.get("/hola")
+def read_root(current_user: Dict[str, Any] = Depends(get_current_user)):
+    print(f"✅ Petición autenticada por el usuario: {current_user.get('email')}")
+    print(f"UID del usuario: {current_user.get('uid')}")
+    return {"Hello": "World"}
