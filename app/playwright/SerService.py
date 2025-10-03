@@ -105,44 +105,53 @@ class SerService:
 
     def start_session(self, token_ser: str):
         """
-        Inicia Playwright, lanza un navegador, se autentica con la cookie
-        y deja la sesión lista para ser usada en múltiples operaciones.
-        Este método reemplaza al antiguo 'login'.
+        Inicia Playwright, lanza un navegador y se autentica inyectando
+        el token en el localStorage.
         """
-        print("Iniciando sesión en el SER...")
+        print("Iniciando sesión en el SER con token de localStorage...")
         self.playwright = sync_playwright().start()
         # Cambia a headless=False si quieres ver el navegador mientras depuras
-        self.browser = self.playwright.chromium.launch(headless=True)
+        self.browser = self.playwright.chromium.launch(headless=False)
 
+        # Contexto con viewport de alta resolución para capturas de mejor calidad
         context = self.browser.new_context(
-            viewport={"width": 1600, "height": 900}, accept_downloads=True
+            viewport={"width": 1920, "height": 1080},
+            device_scale_factor=2,
+            accept_downloads=True,
         )
-
-        # Inyectamos la cookie de autenticación
-        context.add_cookies(
-            [
-                {
-                    "name": "authCookie",
-                    "value": token_ser,  # type: ignore
-                    "domain": self.cookie_domain,
-                    "path": "/",
-                }
-            ]
-        )
-
         self.page = context.new_page()
-        print(f"Navegando a: {self.ser_url}")
-        self.page.goto(self.ser_url, wait_until="networkidle")  # type: ignore
 
-        # Verificamos si el login fue exitoso
-        if "Account/LogOn" in self.page.url:
-            raise PermissionError(
-                "La cookie de autenticación es inválida o ha expirado. "
-                "Actualiza SER_AUTH_COOKIE en tu archivo .env."
+        # 1. Navegar a la página base para establecer el origen del localStorage
+        print(f"Navegando a la URL base: {self.ser_url}")
+        self.page.goto(self.ser_url, wait_until="domcontentloaded")  # type: ignore
+
+        # 2. Inyectar el token en el localStorage del navegador
+        print("Inyectando 'auth-token' en el localStorage...")
+        self.page.evaluate(
+            "(token) => { localStorage.setItem('auth-token', token); }",
+            token_ser,
+        )
+
+        # 3. Navegar a la página de consulta final para que lea el token
+        print(f"Navegando a la página de consulta: {self.ser_url_consumo_fur}")
+        self.page.goto(self.ser_url_consumo_fur, wait_until="networkidle")  # type: ignore
+
+        # 4. Verificar si el login fue exitoso esperando por un elemento clave post-login
+        try:
+            # Esperamos por el dropdown del operador, que es un elemento clave de la UI.
+            self.page.wait_for_selector("p-dropdown", timeout=15000)
+            print("¡Sesión iniciada con éxito! Elemento post-login encontrado.")
+            print(f"Título de la página: '{self.page.title()}'")
+        except Exception:
+            # Si el elemento no aparece, la autenticación falló.
+            print(
+                "Error: No se pudo verificar la sesión. El token puede ser inválido o ha expirado."
             )
-
-        print("¡Sesión iniciada con éxito!")
-        print(f"Título de la página: '{self.page.title()}'")
+            self.page.screenshot(path="error_auth_storage.png")
+            raise PermissionError(
+                "El token de autenticación es inválido o ha expirado. "
+                "No se pudo encontrar el contenido esperado después del login."
+            )
 
     def buscar_data(
         self, nitOperador: str, expediente: str, fechaInicial: date, fechaFinal: date

@@ -116,8 +116,17 @@ def procesar_expediente_worker(
         fecha_inicial_ajustada = get_next_business_day(start_date)
         fecha_final_ajustada = get_previous_business_day(end_date)
 
+        if request.token_ser:
+            # Dentro de este bloque, Pyright sabe que request.token_ser es un 'str'.
+            print("  -> Iniciando sesión con token_ser (localStorage)...")
+            ser_service.start_session(token_ser=request.token_ser)
+        else:
+            # Si no hay token, se usa el método tradicional con usuario y contraseña.
+            print("  -> Iniciando sesión con credenciales (.env)...")
+            ser_service.login()
         # Cada hilo inicia sesión en su propio navegador.
-        ser_service.login()
+        # ser_service.login()
+        # ser_service.start_session(token_ser=request.token_ser || "")
         # nit = "901410065"
         # expediente_str = "96005951"
 
