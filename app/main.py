@@ -258,7 +258,7 @@ def obtener_fures(
     # 5. Se reemplaza el bucle 'for' por el ejecutor de hilos.
     logs_generados_total: List[RpaFursLog] = []
     # Este número debe coincidir con las CPUs asignadas en deploy.sh
-    MAX_WORKERS = 1
+    MAX_WORKERS = 4
 
     print(f"🚀 Iniciando procesamiento paralelo con hasta {MAX_WORKERS} workers...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:

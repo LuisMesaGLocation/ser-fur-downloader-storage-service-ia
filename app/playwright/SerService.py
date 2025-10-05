@@ -58,7 +58,7 @@ class SerService:
         # Iniciamos Playwright y mantenemos la sesión abierta
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
-        self.browser = self.playwright.chromium.launch(headless=False)
+        self.browser = self.playwright.chromium.launch(headless=True)
         context = self.browser.new_context(
             viewport={"width": 1920, "height": 1080},
             device_scale_factor=2,
@@ -111,7 +111,7 @@ class SerService:
         print("Iniciando sesión en el SER con token de localStorage...")
         self.playwright = sync_playwright().start()
         # Cambia a headless=False si quieres ver el navegador mientras depuras
-        self.browser = self.playwright.chromium.launch(headless=False)
+        self.browser = self.playwright.chromium.launch(headless=True)
 
         # Contexto con viewport de alta resolución para capturas de mejor calidad
         context = self.browser.new_context(
@@ -232,7 +232,7 @@ class SerService:
 
                 // Estilos fijos
                 controles.style.position = "fixed";
-                controles.style.top = "1px"; // posición inicial
+                controles.style.top = "0px"; // posición inicial
                 controles.style.transform = "translateX(-50%)";
                 controles.style.left = "50%";
                 controles.style.width = "50%";
@@ -550,23 +550,19 @@ class SerService:
             self.page.wait_for_timeout(2000)  # Tiempo extra para renderizado
 
             # --- SCRIPT PARA MOSTRAR FILTROS ---
+
             script_mostrar_y_posicionar_filtros = """
             () => {
                 const resultados = document.querySelector(".resultados");
-                if (resultados) {
-                    // Empujar la tabla hacia abajo para dejar espacio
-                    resultados.style.marginTop = "280px";
-                }
-
                 const filtros = document.querySelector(".controles");
-                if (filtros) {
-                    // Asegurarse de que sea visible y posicionarlo arriba
+
+                if (filtros && resultados) {
+                    // --- CAMBIOS CLAVE ---
                     filtros.style.display = "block";
-                    filtros.style.top = "1px"; // posición inicial
-                    filtros.style.position = "absolute";
-                    filtros.style.left = "50%";
+                    filtros.style.position = "relative";
+                    filtros.style.margin = "20px auto";
                     filtros.style.width = "50%";
-                    filtros.style.transform = "translateX(-50%)";
+                    resultados.style.marginTop = "20px";
                     filtros.style.zIndex = "10000";
                     filtros.style.background = "white";
                 }
@@ -599,6 +595,8 @@ class SerService:
                 if (filtros) filtros.style.display = "none";
             }
             """
+            self.page.evaluate(script_ocultar_elementos)
+            self.page.evaluate(script_ocultar_elementos)
             self.page.evaluate(script_ocultar_elementos)
             print(
                 "  -> Elementos de la UI (filtros, pie de página) ocultados para la captura."
@@ -683,13 +681,31 @@ class SerService:
                             pdf_icon.click()
 
                         download = dl_info.value
-                        file_name = download.suggested_filename
-                        save_path = os.path.join(period_path, file_name)
+                        original_filename = download.suggested_filename
+
+                        # --- INICIO DE LA MODIFICACIÓN ---
+                        # Separa el nombre del archivo de su extensión
+                        name_part, extension = os.path.splitext(original_filename)
+
+                        # Si hay un guion bajo en el nombre...
+                        if "_" in name_part:
+                            # ...nos quedamos solo con la parte antes del primer guion bajo
+                            base_name = name_part.split("_")[0]
+                            # Creamos el nuevo nombre de archivo
+                            new_filename = f"{base_name}{extension}"
+                        else:
+                            # Si no hay guion bajo, usamos el nombre original
+                            new_filename = original_filename
+                        # --- FIN DE LA MODIFICACIÓN ---
+
+                        # Usamos el nuevo nombre de archivo para guardarlo
+                        save_path = os.path.join(period_path, new_filename)
                         download.save_as(save_path)
 
                         print(
                             f"     -> Fila {i + 1}: PDF del {anio_real}-T{trimestre} guardado en {save_path}."
                         )
+
                     else:
                         print(
                             f"     -> Fila {i + 1}: No se encontró ícono de descarga."
