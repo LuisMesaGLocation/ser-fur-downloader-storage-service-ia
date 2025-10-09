@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from typing import List
@@ -11,7 +12,7 @@ from pydantic.main import BaseModel
 from typing_extensions import Any, Dict, Optional
 
 from app.config.cors import configure_cors
-from app.dto.FuresRequest import FuresRequest
+from app.dto.FuresRequest import FuresRequest, PeriodicaRequest
 from app.gen_pliegos.service import Service as PliegoService
 from app.playwright.SerService import SerService
 from app.repository.BigQueryRepository import BigQueryRepository, Oficio, RpaFursLog
@@ -314,3 +315,99 @@ def obtener_fures(
     return FinalResponse(
         furs_logs=logs_generados_total, pliegos_results=pliegos_responses
     )
+
+@app.post("/procesar-periodica")
+def procesar_periodica(request: PeriodicaRequest):
+    """
+    Descarga y registra los FURs (PDFs) del SER para los registros de
+    EXPEDIENTES_BDU_PERIODICA según los años y trimestres solicitados.
+    """
+    ingestion_id = str(uuid.uuid4())
+
+    print(f"Iniciando procesamiento para años {request.annos} y trimestres {request.trimestres}...")
+
+    # Limpiar descargas
+    download_folder = os.getenv("DOWNLOAD_PATH", "descargas")
+    if os.path.exists(download_folder):
+        print(f"Limpiando directorio de descargas: {download_folder}")
+        shutil.rmtree(download_folder)
+
+    bq_repo = BigQueryRepository()
+    registros = bq_repo.obtenerPeriodica(request.annos, request.trimestres)
+
+    if not registros:
+        raise HTTPException(status_code=404, detail="No se encontraron registros para los periodos solicitados.")
+
+    logs_generados_total = []
+    storage_repo = StorageRepository()
+
+    for item in registros:
+        try:
+            nit = str(item["Identificacion"])
+            expediente = str(item["Expediente"])
+            anio = int(item["ANNO"])
+            trimestre = int(item["TRIMESTRE"])
+
+            print(f"Procesando NIT {nit} | Expediente {expediente} | {anio}-T{trimestre}")
+
+            mes_inicio = 3 * (trimestre - 1) + 1
+            fecha_inicial = get_next_business_day(date(anio, mes_inicio, 1))
+
+            # Ultimo mes del trimestre
+            mes_final = mes_inicio + 2
+            # Calculamos el primer día del siguiente mes y restamos 1 día
+            if mes_final == 12:
+                fecha_final = get_previous_business_day(date(anio, 12, 31))
+            else:
+                fecha_final = get_previous_business_day(date(anio, mes_final + 1, 1) - timedelta(days=1))
+
+            ser_service = SerService()
+            ser_service.start_session(request.token_ser)
+
+            # Buscar en SER y descargar
+            ser_service.buscar_data(nitOperador=nit, expediente=expediente, fechaInicial=fecha_inicial, fechaFinal=fecha_final)
+            ser_service.descargar_y_clasificar_furs_paginado(
+                nit=nit,
+                anio=anio,
+                expediente=int(expediente),
+                seccion="ia",
+                trimestres=[trimestre],
+            )
+
+            # Subir a GCS
+            uploaded_urls, gsutil_paths = storage_repo.upload_period_and_images_standalone(
+                base_download_path=ser_service.download_path,
+                seccion="ia",
+                anio=anio,
+                periodo=trimestre,
+                nit=nit,
+                expediente=expediente,
+            )
+
+            # Insertar en BigQuery
+            if uploaded_urls:
+                log = {
+                    "year": anio,
+                    "nitOperador": nit,
+                    "expediente": expediente,
+                    "trimestre": trimestre,
+                    "cod_seven": item.get("Cod_Servicio_Seven"),
+                    "subido_a_storage": True,
+                    "links_documentos": uploaded_urls,
+                    "gsutil_log_documents": gsutil_paths,
+                    "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
+                    "codigo_servicio": item.get("Cod_Servicio"),
+                    "servicio": item.get("Servicio"),
+                    "expediente_habilitado": "NO",
+                }
+                bq_repo.insert_upload_log(RpaFursLog(**log), ingestion_id=ingestion_id)
+                logs_generados_total.append(log)
+
+            ser_service.close_session()
+
+        except Exception as e:
+            print(f"Error al procesar NIT {item.get('Identificacion')}: {e}")
+            continue
+
+    return {"registros_procesados": len(logs_generados_total)}
+

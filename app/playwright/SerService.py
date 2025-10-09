@@ -59,21 +59,22 @@ class SerService:
         self.playwright = sync_playwright().start()
         # Lanzamos el navegador en modo "headed" (no oculto) para poder ver la interfaz
         self.browser = self.playwright.chromium.launch(headless=True)
-
         context = self.browser.new_context(
-            viewport={"width": 1600, "height": 900}, accept_downloads=True
+            viewport={"width": 1920, "height": 1080},
+            device_scale_factor=2,
+            accept_downloads=True,
         )
 
         self.page = context.new_page()
 
-        print(f"Navegando a la página de login: {self.ser_url}Account/LogOn")
-        self.page.goto(f"{self.ser_url}Account/LogOn")
+        print(f"Navegando a la página de login: {self.ser_url}")
+        self.page.goto(f"{self.ser_url}")
 
         print("Llenando formulario de login...")
 
         # Llenamos los campos de usuario y contraseña
-        self.page.locator("#username").fill(self.ser_user)  # type: ignore
-        self.page.locator("#password").fill(self.ser_password)  # type: ignore
+        self.page.locator("#Usuario").fill(self.ser_user)  # type: ignore
+        self.page.locator("#Clave").fill(self.ser_password)  # type: ignore
 
         # tiempo de espera
         self.page.wait_for_timeout(2000)
@@ -84,63 +85,79 @@ class SerService:
 
         # Ahora hacemos clic en el botón de ingresar
         print("Haciendo clic en el botón Ingresar...")
-        self.page.locator('a.jqDefaultActionButton:has-text("Ingresar")').click()
+        self.page.locator("#aceptar").click()
 
-        self.page.wait_for_timeout(500)
+        try:
+            # Espera hasta 30 segundos a que la URL contenga "/principal/index"
+            print("Esperando la redirección después del login...")
+            self.page.wait_for_url("**/principal/index**", timeout=2000)
 
-        # Verificamos si el login fue exitoso
-        if "Account/LogOn" in self.page.url:
+            # Si la línea anterior tiene éxito, significa que el login fue correcto
+            print("¡Sesión iniciada con éxito!")
+            print(f"Título de la página: '{self.page.title()}'")
+
+        except Exception as e:
+            # Si después de 30 segundos la URL no es la correcta, se lanza un error
+            # y se ejecuta este bloque.
+            print(f"La página no redirigió a la URL esperada. Error: {e}")
             raise PermissionError("Las credenciales son inválidas o el login falló.")
-
-        print("¡Sesión iniciada con éxito!")
-        print(f"Título de la página: '{self.page.title()}'")
+        # --- FIN DEL REEMPLAZO ---
 
     def start_session(self, token_ser: str):
         """
-        Inicia Playwright, lanza un navegador, se autentica con la cookie
-        y deja la sesión lista para ser usada en múltiples operaciones.
-        Este método reemplaza al antiguo 'login'.
+        Inicia Playwright, lanza un navegador y se autentica inyectando
+        el token en el localStorage.
         """
-        print("Iniciando sesión en el SER...")
+        print("Iniciando sesión en el SER con token de localStorage...")
         self.playwright = sync_playwright().start()
         # Cambia a headless=False si quieres ver el navegador mientras depuras
         self.browser = self.playwright.chromium.launch(headless=True)
 
+        # Contexto con viewport de alta resolución para capturas de mejor calidad
         context = self.browser.new_context(
-            viewport={"width": 1600, "height": 900}, accept_downloads=True
+            viewport={"width": 1920, "height": 1080},
+            device_scale_factor=2,
+            accept_downloads=True,
         )
-
-        # Inyectamos la cookie de autenticación
-        context.add_cookies(
-            [
-                {
-                    "name": "authCookie",
-                    "value": token_ser,  # type: ignore
-                    "domain": self.cookie_domain,
-                    "path": "/",
-                }
-            ]
-        )
-
         self.page = context.new_page()
-        print(f"Navegando a: {self.ser_url}")
-        self.page.goto(self.ser_url, wait_until="networkidle")  # type: ignore
 
-        # Verificamos si el login fue exitoso
-        if "Account/LogOn" in self.page.url:
-            raise PermissionError(
-                "La cookie de autenticación es inválida o ha expirado. "
-                "Actualiza SER_AUTH_COOKIE en tu archivo .env."
+        # 1. Navegar a la página base para establecer el origen del localStorage
+        print(f"Navegando a la URL base: {self.ser_url}")
+        self.page.goto(self.ser_url, wait_until="domcontentloaded")  # type: ignore
+
+        # 2. Inyectar el token en el localStorage del navegador
+        print("Inyectando 'auth-token' en el localStorage...")
+        self.page.evaluate(
+            "(token) => { localStorage.setItem('auth-token', token); }",
+            token_ser,
+        )
+
+        # 3. Navegar a la página de consulta final para que lea el token
+        print(f"Navegando a la página de consulta: {self.ser_url_consumo_fur}")
+        self.page.goto(self.ser_url_consumo_fur, wait_until="networkidle")  # type: ignore
+
+        # 4. Verificar si el login fue exitoso esperando por un elemento clave post-login
+        try:
+            # Esperamos por el dropdown del operador, que es un elemento clave de la UI.
+            self.page.wait_for_selector("p-dropdown", timeout=15000)
+            print("¡Sesión iniciada con éxito! Elemento post-login encontrado.")
+            print(f"Título de la página: '{self.page.title()}'")
+        except Exception:
+            # Si el elemento no aparece, la autenticación falló.
+            print(
+                "Error: No se pudo verificar la sesión. El token puede ser inválido o ha expirado."
             )
-
-        print("¡Sesión iniciada con éxito!")
-        print(f"Título de la página: '{self.page.title()}'")
+            self.page.screenshot(path="error_auth_storage.png")
+            raise PermissionError(
+                "El token de autenticación es inválido o ha expirado. "
+                "No se pudo encontrar el contenido esperado después del login."
+            )
 
     def buscar_data(
         self, nitOperador: str, expediente: str, fechaInicial: date, fechaFinal: date
     ):
         """
-        Con una sesión ya iniciada, busca los datos llenando el formulario y haciendo clic.
+        Con una sesión ya iniciada, se buscan los datos llenando el formulario y haciendo clic.
         """
         self.page.goto(self.ser_url_consumo_fur, wait_until="networkidle")  # type: ignore
         if not self.page:
@@ -152,29 +169,109 @@ class SerService:
             # Formateamos las fechas al formato que el formulario web espera (dd/mm/yyyy)
             fecha_ini_str = fechaInicial.strftime("%d/%m/%Y")
             fecha_fin_str = fechaFinal.strftime("%d/%m/%Y")
-
             print(
                 f"Buscando datos para NIT: {nitOperador}, Periodo: {fecha_ini_str} a {fecha_fin_str}..."
             )
+            self.page.locator("p-dropdown").first.click()
+            search_input = self.page.locator("input.p-dropdown-filter")
+            search_input.fill(str(nitOperador))
+            option_to_select = self.page.locator(
+                f"li[role='option']:has-text('{nitOperador}')"
+            )
+            option_to_select.wait_for(state="visible", timeout=15000)
+            option_to_select.click()
 
-            # Limpiamos y luego escribimos en el campo NIT
-            self.page.locator("#nitoperador").clear()
-            self.page.locator("#nitoperador").type(str(nitOperador), delay=150)
-            self.page.wait_for_timeout(500)
+            expediente_input = self.page.locator(
+                'input[formcontrolname="numeroExpediente"]'
+            )
+            expediente_input.clear()
+            expediente_input.type(str(expediente), delay=150)
 
-            self.page.locator("#codigoexpediente").clear()
-            self.page.locator("#codigoexpediente").type(str(expediente), delay=150)
-            # Limpiamos y luego escribimos en el campo de fecha inicial
-            self.page.locator("#fechainicial").clear()
-            self.page.locator("#fechainicial").type(fecha_ini_str, delay=150)
+            # --- CAMPO FECHA INICIAL ---
+            fecha_inicio_input = self.page.locator(
+                'p-calendar[formcontrolname="fechaInicio"] input'
+            )
+            print(f"  -> Escribiendo la fecha inicial: {fecha_ini_str}...")
+            fecha_inicio_input.click()  # Hacemos clic para asegurar que el campo tiene foco
+            fecha_inicio_input.clear()
+            # Escribimos la fecha lentamente para simular un humano
+            fecha_inicio_input.type(fecha_ini_str, delay=100)
 
-            # Limpiamos y luego escribimos en el campo de fecha final
-            self.page.locator("#fechafinal").clear()
-            self.page.locator("#fechafinal").type(fecha_fin_str, delay=150)
+            # --- CAMPO FECHA FINAL ---
+            fecha_fin_input = self.page.locator(
+                'p-calendar[formcontrolname="fechaFin"] input'
+            )
+            print(f"  -> Escribiendo la fecha final: {fecha_fin_str}...")
+            fecha_fin_input.click()  # Hacemos clic para asegurar que el campo tiene foco
+            fecha_fin_input.clear()
+            # Escribimos la fecha lentamente para simular un humano
+            fecha_fin_input.type(fecha_fin_str, delay=100)
 
-            print("Haciendo clic en el botón de búsqueda '#divbusqueda_xhs1d'...")
-            self.page.locator("#link_aj5yn_xhs1d0").click()
-            self.page.wait_for_timeout(2000)  # Espera 5 segundos
+            print("Haciendo clic en el botón 'Consultar'...")
+            consultar_button = self.page.locator("button:has-text('Consultar')")
+            consultar_button.click()
+
+            # 1. Guarda tu script en una variable
+            javascript_code = """
+            () => { // Se envuelve en una función para asegurar la correcta ejecución
+                const pieDePagina = document.querySelector("app-pie-pagina");
+
+                // 2. Comprobar si existe y luego ocultarlo
+                if (pieDePagina) {
+                pieDePagina.style.display = "none";
+                console.log("Pie de página ocultado exitosamente.");
+                } else {
+                console.warn("Elemento <app-pie-pagina> no encontrado.");
+                }
+
+                const controles = document.querySelector(".controles");
+                if (!controles) {
+                    console.error('Elemento ".controles" no encontrado.');
+                    return;
+                }
+
+                // Estilos fijos
+                controles.style.position = "fixed";
+                controles.style.top = "0px"; // posición inicial
+                controles.style.transform = "translateX(-50%)";
+                controles.style.left = "50%";
+                controles.style.width = "50%";
+                controles.style.height = "350px";
+                controles.style.border = "2px solid #0078d4";
+                controles.style.borderRadius = "8px";
+                controles.style.zIndex = 10000;
+                controles.style.cursor = "move";
+                controles.style.overflow = "auto";
+
+                // Hacerlo arrastrable
+                let isDragging = false;
+                let offsetX = 0;
+                let offsetY = 0;
+
+                controles.addEventListener("mousedown", (e) => {
+                  isDragging = true;
+                  offsetX = e.clientX - controles.offsetLeft;
+                  offsetY = e.clientY - controles.offsetTop;
+                  controles.style.userSelect = "none";
+                });
+
+                document.addEventListener("mousemove", (e) => {
+                  if (isDragging) {
+                    controles.style.left = e.clientX - offsetX + "px";
+                    controles.style.top = e.clientY - offsetY + "px";
+                  }
+                });
+
+                document.addEventListener("mouseup", () => {
+                  isDragging = false;
+                  controles.style.userSelect = "auto";
+                });
+            }
+            """
+
+            # 2. Ejecuta el script en el navegador
+            self.page.evaluate(javascript_code)
+            self.page.wait_for_timeout(3000)
 
         except Exception as e:
             print(f"Error durante la búsqueda de datos para NIT {nitOperador}: {e}")
@@ -413,13 +510,12 @@ class SerService:
                 f"  -> ¡Error! Se guardó una captura de pantalla en: {screenshot_path}"
             )
 
-    def descargar_y_clasificar_pdfs(
+    def descargar_y_clasificar_furs_paginado(
         self, nit: str, anio: int, expediente: int, seccion: str, trimestres: List[int]
     ):
         """
-        Prepara las tablas, toma capturas, itera cada fila para extraer AÑO y TRIMESTRE,
-        descarga los PDFs en sus carpetas dinámicas correctas y finalmente,
-        copia las imágenes de evidencia a cada carpeta de año y período creada.
+        Navega a través de la paginación, toma capturas de pantalla de filas colapsadas y expandidas,
+        y descarga todos los PDFs, clasificándolos en carpetas por año y trimestre.
         """
         if not self.page or self.page.is_closed():
             print("Error: La página no está disponible o ha sido cerrada.")
@@ -436,377 +532,225 @@ class SerService:
         )
         os.makedirs(base_search_year_path, exist_ok=True)
 
-        screenshot_auto_path = os.path.join(
-            base_search_year_path, f"{nit}-autoliquidaciones-general.png"
+        # Usaremos listas para guardar las rutas de las capturas de cada página
+        screenshot_colapsada_paths: List[str] = []
+        screenshot_expandida_paths: List[str] = []
+
+        # Ocultar el pie de página para que no interfiera con las capturas
+        self.page.evaluate(
+            '() => { const pf = document.querySelector("app-pie-pagina"); if (pf) pf.style.display = "none"; }'
         )
-        screenshot_obli_path = os.path.join(
-            base_search_year_path, f"{nit}-obligaciones-general.png"
-        )
 
-        # --- SECCIÓN DE AUTOLIQUIDACIÓN ---
-        try:
-            scroll_container_1 = self.page.locator("#tabs-1 .scrollBar")
-            if scroll_container_1.is_visible():
-                print("  -> [Autoliquidación] Preparando y tomando captura...")
-                target_header_1 = self.page.locator('#tabs-1 th:has-text("Estado FUR")')
-                if target_header_1.is_visible(timeout=5000):
-                    scroll_container_1.evaluate(
-                        "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
-                    )
-                javascript_a_inyectar = """
-                () => {
-                    // 1. Busca el contenedor principal una sola vez
-                    const container = document.querySelector("#divbusqueda_xhs1d");
+        page_num = 1
+        while True:
+            print(f"\n--- Procesando página {page_num} ---")
 
-                    // 2. Si el contenedor existe, procede
-                    if (container) {
-                        // 3. Busca el ícono de restaurar DENTRO del contenedor y haz clic
-                        const restoreIcon = container.querySelector("img.restoreContainer");
-                        if (restoreIcon) {
-                            restoreIcon.click();
-                        }
+            # Esperar a que la tabla se cargue y esté estable
+            self.page.wait_for_selector("div.p-datatable-wrapper", timeout=20000)
+            self.page.wait_for_timeout(2000)  # Tiempo extra para renderizado
 
-                        // 4. Modifica los estilos del contenedor con máxima prioridad
-                        container.style.setProperty("left", "900px", "important");
-                        container.style.setProperty("top", "0px", "important");
-                    }
+            # --- SCRIPT PARA MOSTRAR FILTROS ---
+
+            script_mostrar_y_posicionar_filtros = """
+            () => {
+                const resultados = document.querySelector(".resultados");
+                const filtros = document.querySelector(".controles");
+
+                if (filtros && resultados) {
+                    // --- CAMBIOS CLAVE ---
+                    filtros.style.display = "block";
+                    filtros.style.position = "relative";
+                    filtros.style.margin = "20px auto";
+                    filtros.style.width = "50%";
+                    resultados.style.marginTop = "20px";
+                    filtros.style.zIndex = "10000";
+                    filtros.style.background = "white";
                 }
-                """
 
-                # Ejecuta el script completo en el contexto de la página
-                self.page.evaluate(javascript_a_inyectar)
-                self.page.wait_for_timeout(500)
-                self.page.evaluate(javascript_a_inyectar)
-                self.page.wait_for_timeout(500)
-                self.page.screenshot(path=screenshot_auto_path, full_page=True)
-                print(f"  -> Captura guardada en: {screenshot_auto_path}")
+                const pieDePagina = document.querySelector("app-pie-pagina");
+                if (pieDePagina) pieDePagina.style.display = "none";
+            }
+            """
 
-                rows = self.page.locator(
-                    "#tabs-1 table.scrollBarProcesada tbody tr:has(td)"
-                )
-                print(f"  -> [Autoliquidación] Procesando {rows.count()} filas...")
-
-                headers = self.page.locator(
-                    "#tabs-1 table.scrollBarProcesada tbody tr:first-child th"
-                )
-                estado_index = -1
-                for i in range(headers.count()):
-                    if "Estado FUR" in headers.nth(i).inner_text():
-                        estado_index = i
-                        print(
-                            f"  -> [Autoliquidación] Columna 'Estado FUR' encontrada en el índice {i}"
-                        )
-                        break
-                # --- FIN DEL REEMPLAZO ---
-
-                for i in range(rows.count()):
-                    try:
-                        row = rows.nth(i)
-                        row.scroll_into_view_if_needed()
-                        if estado_index != -1:
-                            estado_text = (
-                                row.locator("td")
-                                .nth(estado_index)
-                                .inner_text(timeout=3000)
-                                .strip()
-                                .lower()
-                            )
-                            if estado_text in ["vencido", "anulado"]:
-                                print(
-                                    f"     -> Fila {i + 1}: Omitiendo (Autoliquidación), estado es '{estado_text.capitalize()}'."
-                                )
-                                continue
-
-                        fecha_str = row.locator("td").nth(6).inner_text(timeout=10000)
-                        fecha_obj = datetime.strptime(
-                            fecha_str.strip(), "%d/%m/%Y"
-                        ).date()
-
-                        anio_real = fecha_obj.year
-                        trimestre = (fecha_obj.month - 1) // 3 + 1
-
-                        period_path = os.path.join(
-                            self.download_path,
-                            seccion,
-                            str(anio_real),
-                            f"{nit}-{expediente}",
-                            f"{trimestre}T",
-                        )
-                        save_dir = os.path.join(period_path, "autoliquidacion")
-                        os.makedirs(save_dir, exist_ok=True)
-                        created_period_paths.add(period_path)
-
-                        pdf_icon = row.locator("a.jqNodivLoadingForm.fa.fa-file-pdf-o")
-                        if pdf_icon.count() > 0:
-                            with self.page.expect_download(timeout=60000) as dl_info:
-                                pdf_icon.click()
-                            download = dl_info.value
-                            file_name = download.suggested_filename
-
-                            save_path_subdir = os.path.join(save_dir, file_name)
-                            download.save_as(save_path_subdir)
-
-                            save_path_period_root = os.path.join(period_path, file_name)
-                            download.save_as(save_path_period_root)
-
-                            print(
-                                f"     -> Fila {i + 1}: PDF del {anio_real}-T{trimestre} guardado."
-                            )
-                    except Exception as e:
-                        print(
-                            f"     -> ERROR procesando fila {i + 1} en Autoliquidación: {e}"
-                        )
-            else:
-                # Si no hay tabla, creamos una carpeta para cada trimestre y guardamos
-                # una captura como evidencia de que no se encontraron datos.
-                print("  -> [Autoliquidación] No se encontró la tabla de resultados.")
-                for trimestre in trimestres:
-                    # 1. Construir la ruta del DIRECTORIO para el trimestre.
-                    #    La base es 'base_search_year_path', que es la carpeta del año/expediente.
-                    trimestre_dir_path = os.path.join(
-                        base_search_year_path, f"{trimestre}T"
-                    )
-                    os.makedirs(trimestre_dir_path, exist_ok=True)
-                    created_period_paths.add(trimestre_dir_path)
-
-                    # 2. Definir la ruta del ARCHIVO de la captura dentro de ese nuevo directorio.
-
-                    screenshot_name = f"{nit}-autoliquidaciones.png"
-                    screenshot_path = os.path.join(trimestre_dir_path, screenshot_name)
-
-                    # 3. Guardar la captura.
-                    self.page.screenshot(path=screenshot_path, full_page=True)
-                    print(
-                        f"  -> Carpeta T{trimestre} creada. Captura guardada en: {screenshot_path}"
-                    )
-
-        except Exception as e:
-            print(f"Ocurrió un error general en la sección de Autoliquidación: {e}")
-
-        # --- SECCIÓN DE OBLIGACIÓN ---
-        try:
-            print("\n  -> Navegando a la pestaña 'FURs Generados para Obligación'...")
-            self.page.locator('a:has-text("FURs Generados para Obligación")').click()
-            self.page.wait_for_load_state("networkidle", timeout=1500)
-            print("  -> Pestaña de Obligaciones cargada.")
-
-            # Ahora, con la página cargada, verificamos de forma segura qué contenido tiene.
-            no_data_locator = self.page.locator(
-                '#tabs-2 p:has-text("No hay datos que mostrar")'
+            self.page.evaluate(script_mostrar_y_posicionar_filtros)
+            print(
+                "  -> Filtros posicionados en la parte superior para la captura 'colapsada'."
             )
 
-            # Si el mensaje "No hay datos" NO es visible, significa que SÍ hay una tabla.
-            if not no_data_locator.is_visible():
-                print("  -> [Obligación] Se detectó una tabla con datos.")
+            # --- Captura Colapsada ---
+            screenshot_colapsada_path = os.path.join(
+                base_search_year_path, f"{nit}-colapsada-pag-{page_num}.png"
+            )
+            self.page.screenshot(path=screenshot_colapsada_path, full_page=True)
+            screenshot_colapsada_paths.append(screenshot_colapsada_path)
+            print(f"  -> Captura 'colapsada' guardada en: {screenshot_colapsada_path}")
 
-                rows = self.page.locator(
-                    "#tabs-2 table.scrollBarProcesada tbody tr:has(td)"
-                )
-                print(f"  -> [Obligación] Procesando {rows.count()} filas...")
+            # --- SOLUCIÓN: OCULTAR ELEMENTOS MOLESTOS ANTES DE LA CAPTURA ---
+            script_ocultar_elementos = """
+            () => {
+                const pieDePagina = document.querySelector("app-pie-pagina");
+                if (pieDePagina) pieDePagina.style.display = "none";
 
-                print("  -> [Obligación] Preparando y tomando captura general...")
-                target_header_2 = self.page.locator('#tabs-2 th:has-text("Estado FUR")')
+                const filtros = document.querySelector(".controles");
+                if (filtros) filtros.style.display = "none";
+            }
+            """
+            self.page.evaluate(script_ocultar_elementos)
+            self.page.evaluate(script_ocultar_elementos)
+            self.page.evaluate(script_ocultar_elementos)
+            print(
+                "  -> Elementos de la UI (filtros, pie de página) ocultados para la captura."
+            )
 
-                if target_header_2.is_visible(timeout=5000):
-                    scroll_container_2 = self.page.locator("#tabs-2 .scrollBar")
-                    scroll_container_2.evaluate(
-                        "node => node.scrollLeft = (node.scrollWidth - node.clientWidth) / 1.8"
-                    )
+            # --- Expandir todas las filas ---
+            expand_buttons = self.page.locator("button.boton-expandir")
+            if expand_buttons.count() > 0:
+                print(f"  -> Expandiendo {expand_buttons.count()} filas...")
+                for i in range(expand_buttons.count()):
+                    expand_buttons.nth(i).click()
+                    self.page.wait_for_timeout(200)  # Pequeña pausa entre clics
 
-                javascript_a_inyectar = """
-                () => {
-                    // 1. Busca el contenedor principal una sola vez
-                    const container = document.querySelector("#divbusqueda_xhs1d");
+                self.page.wait_for_timeout(
+                    3000
+                )  # Esperar a que todo el contenido se cargue
 
-                    // 2. Si el contenedor existe, procede
-                    if (container) {
-                        // 3. Busca el ícono de restaurar DENTRO del contenedor y haz clic
-                        const restoreIcon = container.querySelector("img.restoreContainer");
-                        if (restoreIcon) {
-                            restoreIcon.click();
-                        }
-
-                        // 4. Modifica los estilos del contenedor con máxima prioridad
-                        container.style.setProperty("left", "900px", "important");
-                        container.style.setProperty("top", "0px", "important");
-                    }
-                }
-                """
-
-                # Ejecuta el script completo en el contexto de la página
-                self.page.evaluate(javascript_a_inyectar)
-                self.page.wait_for_timeout(500)
-                self.page.evaluate(javascript_a_inyectar)
-                self.page.wait_for_timeout(500)
-                self.page.screenshot(path=screenshot_obli_path, full_page=True)
-                print(f"  -> Captura guardada en: {screenshot_obli_path}")
-
-                rows = self.page.locator(
-                    "#tabs-2 table.scrollBarProcesada tbody tr:has(td)"
-                )
-                headers_obli = self.page.locator(
-                    "#tabs-2 table.scrollBarProcesada tbody tr:first-child th"
+                # --- Captura Expandida ---
+                screenshot_expandida_path = os.path.join(
+                    base_search_year_path, f"{nit}-expandida-pag-{page_num}.png"
                 )
 
-                print("  -> [Obligación] Encabezados encontrados:")
-                for h_idx in range(headers_obli.count()):
-                    print(f"    - {headers_obli.nth(h_idx).inner_text()}")
-                estado_fur_index_obli = -1
-                for h_idx in range(headers_obli.count()):
-                    if "Estado FUR" in headers_obli.nth(h_idx).inner_text():
-                        estado_fur_index_obli = h_idx
-                        print(
-                            f"  -> [Obligación] Columna 'Estado FUR' encontrada en el índice {estado_fur_index_obli}"
-                        )
-                        break
-
-                print(f"  -> [Obligación] Procesando {rows.count()} filas...")
-                for i in range(rows.count()):
-                    try:
-                        row = rows.nth(i)
-                        row.scroll_into_view_if_needed()
-                        if estado_fur_index_obli != -1:
-                            estado_text = (
-                                row.locator("td")
-                                .nth(estado_fur_index_obli)
-                                .inner_text(timeout=3000)
-                                .strip()
-                                .lower()
-                            )
-                            if estado_text in ["vencido", "anulado"]:
-                                print(
-                                    f"     -> Fila {i + 1}: Omitiendo descarga, estado es '{estado_text.capitalize()}'."
-                                )
-                                continue
-
-                        fecha_str = row.locator("td").nth(7).inner_text(timeout=500)
-                        fecha_obj = datetime.strptime(
-                            fecha_str.strip(), "%d/%m/%Y"
-                        ).date()
-
-                        anio_real = fecha_obj.year
-                        trimestre = (fecha_obj.month - 1) // 3 + 1
-
-                        period_path = os.path.join(
-                            self.download_path,
-                            seccion,
-                            str(anio_real),
-                            f"{nit}-{expediente}",
-                            f"{trimestre}T",
-                        )
-                        save_dir = os.path.join(period_path, "obligacion")
-                        os.makedirs(save_dir, exist_ok=True)
-                        created_period_paths.add(period_path)
-
-                        pdf_icon = row.locator("a.jqNodivLoadingForm.fa.fa-file-pdf-o")
-                        if pdf_icon.count() > 0:
-                            with self.page.expect_download(timeout=60000) as dl_info:
-                                pdf_icon.click()
-                            download = dl_info.value
-                            file_name = download.suggested_filename
-
-                            save_path_subdir = os.path.join(save_dir, file_name)
-                            download.save_as(save_path_subdir)
-
-                            save_path_period_root = os.path.join(period_path, file_name)
-                            download.save_as(save_path_period_root)
-
-                            print(
-                                f"     -> Fila {i + 1}: PDF del {anio_real}-T{trimestre} guardado."
-                            )
-                    except Exception as e:
-                        print(
-                            f"     -> ERROR procesando fila {i + 1} en Obligación: {e}"
-                        )
+                self.page.screenshot(path=screenshot_expandida_path, full_page=True)
+                screenshot_expandida_paths.append(screenshot_expandida_path)
+                print(
+                    f"  -> Captura 'expandida' guardada en: {screenshot_expandida_path}"
+                )
             else:
-                for trimestre in trimestres:
-                    # 1. Construir la ruta del DIRECTORIO para el trimestre.
-                    #    La base es 'base_search_year_path', que es la carpeta del año/expediente.
-                    trimestre_dir_path = os.path.join(
-                        base_search_year_path, f"{trimestre}T"
+                print("  -> No se encontraron filas para expandir en esta página.")
+
+            # --- FASE 2: PROCESAR FILAS Y DESCARGAR PDFS ---
+            rows = self.page.locator("tbody.p-datatable-tbody > tr")
+            print(f"  -> Procesando {rows.count()} filas en la página {page_num}...")
+
+            for i in range(rows.count()):
+                row = rows.nth(i)
+                # Omitir filas de detalle (las expandidas) en el bucle principal
+                if "p-datatable-row-expansion" in (row.get_attribute("class") or ""):
+                    continue
+
+                try:
+                    # --- VALIDACIÓN DE ESTADO FUR ---
+                    # La columna "Estado FUR" es la 7ma (índice 6).
+                    estado_fur_str = (
+                        row.locator("td")
+                        .nth(6)
+                        .inner_text(timeout=5000)
+                        .strip()
+                        .lower()
                     )
-                    os.makedirs(trimestre_dir_path, exist_ok=True)
-                    created_period_paths.add(trimestre_dir_path)
 
-                    # 2. Definir la ruta del ARCHIVO de la captura dentro de ese nuevo directorio.
-
-                    screenshot_name = f"{nit}-obligaciones.png"
-                    screenshot_path = os.path.join(trimestre_dir_path, screenshot_name)
-
-                    # 3. Guardar la captura.
-                    self.page.screenshot(path=screenshot_path, full_page=True)
-                    print(
-                        f"  -> Carpeta T{trimestre} creada. Captura guardada en: {screenshot_path}"
+                    if estado_fur_str in ["vencido", "anulado"]:
+                        print(
+                            f"     -> Fila {i + 1}: Omitiendo, estado es '{estado_fur_str.capitalize()}'."
+                        )
+                        continue  # Salta al siguiente registro
+                    # La columna de fecha inicial es la 4ta (índice 3)
+                    fecha_inicial_str = (
+                        row.locator("td").nth(3).inner_text(timeout=5000)
                     )
+                    fecha_obj = datetime.strptime(
+                        fecha_inicial_str.strip(), "%d/%m/%Y"
+                    ).date()
 
-        except Exception as e:
-            print(f"Ocurrió un error general en la sección de Obligaciones: {e}")
+                    anio_real = fecha_obj.year
+                    trimestre = (fecha_obj.month - 1) // 3 + 1
 
+                    period_path = os.path.join(
+                        self.download_path,
+                        seccion,
+                        str(anio_real),
+                        f"{nit}-{expediente}",
+                        f"{trimestre}T",
+                    )
+                    os.makedirs(period_path, exist_ok=True)
+                    created_period_paths.add(period_path)
+
+                    # El ícono de PDF/acción está en la última columna
+                    pdf_icon = row.locator("td:last-child div.ver-fur")
+                    if pdf_icon.count() > 0:
+                        with self.page.expect_download(timeout=60000) as dl_info:
+                            pdf_icon.click()
+
+                        download = dl_info.value
+                        original_filename = download.suggested_filename
+
+                        # --- INICIO DE LA MODIFICACIÓN ---
+                        # Separa el nombre del archivo de su extensión
+                        name_part, extension = os.path.splitext(original_filename)
+
+                        # Si hay un guion bajo en el nombre...
+                        if "_" in name_part:
+                            # ...nos quedamos solo con la parte antes del primer guion bajo
+                            base_name = name_part.split("_")[0]
+                            # Creamos el nuevo nombre de archivo
+                            new_filename = f"{base_name}{extension}"
+                        else:
+                            # Si no hay guion bajo, usamos el nombre original
+                            new_filename = original_filename
+                        # --- FIN DE LA MODIFICACIÓN ---
+
+                        # Usamos el nuevo nombre de archivo para guardarlo
+                        save_path = os.path.join(period_path, new_filename)
+                        download.save_as(save_path)
+
+                        print(
+                            f"     -> Fila {i + 1}: PDF del {anio_real}-T{trimestre} guardado en {save_path}."
+                        )
+
+                    else:
+                        print(
+                            f"     -> Fila {i + 1}: No se encontró ícono de descarga."
+                        )
+
+                except Exception as e:
+                    print(f"     -> ERROR procesando fila {i + 1}: {e}")
+
+            # --- FASE 3: NAVEGAR A LA SIGUIENTE PÁGINA ---
+            next_button = self.page.locator("button.p-paginator-next")
+            if next_button.count() == 0 or next_button.is_disabled():
+                print(
+                    "--- Fin de la paginación. Es la última página o no hay paginador. ---"
+                )
+                break
+
+            print("  -> Navegando a la siguiente página...")
+            next_button.click()
+            page_num += 1
+
+        # --- FASE 4: VERIFICAR TRIMESTRES FALTANTES ---
         print(
             "\n--- Verificando y creando carpetas para trimestres sin datos encontrados ---"
         )
         for trimestre in trimestres:
             expected_period_path = os.path.join(base_search_year_path, f"{trimestre}T")
-
-            # Si el path no fue creado en las fases anteriores, significa que no se encontró ningún PDF.
             if expected_period_path not in created_period_paths:
                 print(
-                    f"  -> No se encontraron datos para T{trimestre}. Creando directorio y evidencia."
+                    f"  -> No se encontraron datos para T{trimestre}. Creando directorio de evidencia."
                 )
                 os.makedirs(expected_period_path, exist_ok=True)
-
-                # Crear subdirectorios para mantener la consistencia
-                os.makedirs(
-                    os.path.join(expected_period_path, "autoliquidacion"), exist_ok=True
-                )
-                os.makedirs(
-                    os.path.join(expected_period_path, "obligacion"), exist_ok=True
-                )
-
-                # Guardar una captura de pantalla como evidencia de que no hay datos.
-                # Se puede usar la vista actual de la página.
-                screenshot_name = f"{nit}-sin-datos-T{trimestre}.png"
-                screenshot_path = os.path.join(expected_period_path, screenshot_name)
-                self.page.screenshot(path=screenshot_path, full_page=True)
-
-                # Añadir la ruta a created_period_paths para que las imágenes generales se copien después.
                 created_period_paths.add(expected_period_path)
-                print(
-                    f"     -> Carpeta para T{trimestre} creada. Evidencia guardada en: {screenshot_path}"
-                )
 
-        # --- FASE 2: COPIA DINÁMICA DE IMÁGENES DE EVIDENCIA ---
+        # --- FASE 5: COPIA DINÁMICA DE IMÁGENES DE EVIDENCIA ---
         print("\n--- Iniciando copia dinámica de imágenes de evidencia ---")
-
-        screenshots_to_copy = [screenshot_auto_path, screenshot_obli_path]
-        created_year_paths = {os.path.dirname(p) for p in created_period_paths}
-
-        for img_path in screenshots_to_copy:
-            if not os.path.exists(img_path):
-                print(
-                    f"  -> Advertencia: No se encontró la imagen {os.path.basename(img_path)}, no se copiará."
-                )
-                continue
-
-            # Copiar a la raíz de cada AÑO creado dinámicamente
-            for year_path in created_year_paths:
-                try:
-                    shutil.copy(img_path, year_path)
-                    print(
-                        f"  -> Copia de {os.path.basename(img_path)} a {year_path} exitosa."
-                    )
-                except Exception as e:
-                    print(f"  -> ERROR al copiar imagen a {year_path}: {e}")
-
-            # Copiar a la raíz de cada PERÍODO creado dinámicamente
-            for period_path in created_period_paths:
-                try:
-                    shutil.copy(img_path, period_path)
-                    print(
-                        f"  -> Copia de {os.path.basename(img_path)} a {period_path} exitosa."
-                    )
-                except Exception as e:
-                    print(f"  -> ERROR al copiar imagen a {period_path}: {e}")
+        all_screenshots = screenshot_colapsada_paths + screenshot_expandida_paths
+        for period_path in created_period_paths:
+            for img_path in all_screenshots:
+                if os.path.exists(img_path):
+                    try:
+                        shutil.copy(img_path, period_path)
+                    except Exception as e:
+                        print(
+                            f"  -> ERROR al copiar imagen {os.path.basename(img_path)} a {period_path}: {e}"
+                        )
 
     def close_session(self):
         """
