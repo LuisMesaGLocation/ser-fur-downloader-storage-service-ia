@@ -207,165 +207,82 @@ def read_root(current_user: Dict[str, Any] = Depends(get_current_user)):
     print(f"UID del usuario: {current_user.get('uid')}")
     return {"Hello": "World"}
 
-
 @app.post(
     "/",
-    response_model=FinalResponse,
-    summary="Obtener los últimos 10 registros de FURES",
+    summary="Procesar y registrar FURs (versión simplificada sin sesiones ni pliegos)",
     tags=["FURES"],
 )
-def obtener_fures(
-    request: FuresRequest,
-    originData: Optional[str] = Query(
-        None,
-        description="Origen de los datos: 'database' para BigQuery, otro valor o None para usar datos del body",
-    ),
-    auth_credentials: HTTPAuthorizationCredentials = Depends(security),
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> FinalResponse:
-    request_ingestion_timestamp = datetime.now(timezone.utc).isoformat()
-    print(f"✅ Petición de {current_user.get('email')} recibida.")
-
-    # Se limpia el directorio principal una sola vez al inicio.
-    download_folder = os.getenv("DOWNLOAD_PATH", "descargas")
-    if os.path.exists(download_folder):
-        print(f"Limpiando directorio de descargas principal: {download_folder}")
-        shutil.rmtree(download_folder)
-
-    # La lógica para obtener la lista de expedientes a procesar no cambia.
-    if originData == "database":
-        expedientes_a_procesar = repo_lectura.getOficios(sesion=request.seccion)
-        # ... (lógica de filtrado si aplica)
-    else:
-        if not request.data:
-            raise HTTPException(status_code=400, detail="El campo 'data' es requerido.")
-        expedientes_a_procesar = [Oficio(**item.model_dump()) for item in request.data]
-
-    if not expedientes_a_procesar:
-        print("No hay expedientes para procesar. Finalizando.")
-        return FinalResponse(furs_logs=[], pliegos_results=[])
-
-    sesion_final_final: str = expedientes_a_procesar[0].sesion or ""
-    """radicado_principal = expedientes_a_procesar[0].radicado
-    base_seccion = request.seccion or "rpa-descargas"
-    seccion_final = (
-        f"{base_seccion}-{radicado_principal}" if radicado_principal else base_seccion
-    )"""
-
-    # --- INICIO DE CAMBIOS EN EJECUCIÓN ---
-
-    # 5. Se reemplaza el bucle 'for' por el ejecutor de hilos.
-    logs_generados_total: List[RpaFursLog] = []
-    # Este número debe coincidir con las CPUs asignadas en deploy.sh
-    MAX_WORKERS = 6
-
-    print(f"🚀 Iniciando procesamiento paralelo con hasta {MAX_WORKERS} workers...")
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        # Se crea una "tarea futura" para cada expediente.
-        futuros = {
-            executor.submit(
-                procesar_expediente_worker,
-                sancion,
-                request,
-                sesion_final_final,
-                request_ingestion_timestamp,
-            ): sancion
-            for sancion in expedientes_a_procesar
-        }
-
-        # Se procesan los resultados a medida que las tareas finalizan.
-        for futuro in as_completed(futuros):
-            sancion_original = futuros[futuro]
-            try:
-                # El resultado de un worker es una lista de logs, que se añade al total.
-                resultado_logs = futuro.result()
-                if resultado_logs:
-                    logs_generados_total.extend(resultado_logs)
-            except Exception as exc:
-                print(
-                    f"❗ Excepción en futuro para expediente {sancion_original.expediente}: {exc}"
-                )
-
-    print(
-        f"✅ Procesamiento paralelo completado. Se generaron {len(logs_generados_total)} logs."
-    )
-    pliegos_responses: List[Dict[str, Any]] = []
-    if logs_generados_total:
-        token: Optional[str] = (
-            auth_credentials.credentials if auth_credentials else None
-        )
-        sesiones_unicas = {log.sesion for log in logs_generados_total if log.sesion}
-
-        if sesiones_unicas:
-            print(
-                f"Se encontraron {len(sesiones_unicas)} sesiones únicas para generar pliegos."
-            )
-            pliego_service = PliegoService()
-            for sesion in sesiones_unicas:
-                response = pliego_service.get_pliegos(cod_sesion=sesion, token=token)
-                if response is not None:
-                    pliegos_responses.append(response)
-
-            print(f"Se generaron {len(pliegos_responses)} pliegos.")
-        else:
-            print(
-                "🧐 No se encontraron sesiones únicas en los logs generados. No se generarán pliegos."
-            )
-
-    return FinalResponse(
-        furs_logs=logs_generados_total, pliegos_results=pliegos_responses
-    )
-
-@app.post("/procesar-periodica")
-def procesar_periodica(request: PeriodicaRequest):
+def procesar_fures_simplificado(
+    request: PeriodicaRequest,
+):
     """
-    Descarga y registra los FURs (PDFs) del SER para los registros de
-    EXPEDIENTES_BDU_PERIODICA según los años y trimestres solicitados.
+    Versión simplificada del servicio de descarga de FURs.
+    - Usa la estructura comprobada del endpoint original (/).
+    - Ejecuta procesos en paralelo con ThreadPoolExecutor.
+    - No usa sesiones, radicados, Firebase ni generación de pliegos.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+    import uuid
+
     ingestion_id = str(uuid.uuid4())
+    print(f"🚀 Iniciando procesamiento simplificado para años {request.annos} y trimestres {request.trimestres}...")
 
-    print(f"Iniciando procesamiento para años {request.annos} y trimestres {request.trimestres}...")
-
-    # Limpiar descargas
+    #  Limpieza del directorio de descargas
     download_folder = os.getenv("DOWNLOAD_PATH", "descargas")
     if os.path.exists(download_folder):
-        print(f"Limpiando directorio de descargas: {download_folder}")
+        print(f"🧹 Limpiando directorio de descargas principal: {download_folder}")
         shutil.rmtree(download_folder)
 
+    # 🔹 Inicialización de repositorios
     bq_repo = BigQueryRepository()
-    registros = bq_repo.obtenerPeriodica(request.annos, request.trimestres)
+    storage_repo = StorageRepository()
 
+    # 🔹 Obtener registros desde BigQuery
+    registros = bq_repo.obtenerPeriodica(request.annos, request.trimestres)
     if not registros:
         raise HTTPException(status_code=404, detail="No se encontraron registros para los periodos solicitados.")
 
-    logs_generados_total = []
-    storage_repo = StorageRepository()
+    # 🔹 Variables globales
+    logs_generados_total: List[RpaFursLog] = []
+    playwright_lock = threading.Lock()  # evita condiciones de carrera al iniciar Playwright
 
-    for item in registros:
+    # ============================================================
+    #  Worker: procesa un registro individual
+    # ============================================================
+    def procesar_item(item):
         try:
             nit = str(item["Identificacion"])
             expediente = str(item["Expediente"])
             anio = int(item["ANNO"])
             trimestre = int(item["TRIMESTRE"])
 
-            print(f"Procesando NIT {nit} | Expediente {expediente} | {anio}-T{trimestre}")
+            print(f"🧩 Procesando NIT {nit} | Expediente {expediente} | {anio}-T{trimestre}")
 
+            # Calcular fechas del trimestre
             mes_inicio = 3 * (trimestre - 1) + 1
             fecha_inicial = get_next_business_day(date(anio, mes_inicio, 1))
-
-            # Ultimo mes del trimestre
             mes_final = mes_inicio + 2
-            # Calculamos el primer día del siguiente mes y restamos 1 día
             if mes_final == 12:
                 fecha_final = get_previous_business_day(date(anio, 12, 31))
             else:
-                fecha_final = get_previous_business_day(date(anio, mes_final + 1, 1) - timedelta(days=1))
+                fecha_final = get_previous_business_day(
+                    date(anio, mes_final + 1, 1) - timedelta(days=1)
+                )
 
+            # Inicializar SER
             ser_service = SerService()
-            ser_service.start_session(request.token_ser)
+            with playwright_lock:
+                ser_service.start_session(request.token_ser)
 
-            # Buscar en SER y descargar
-            ser_service.buscar_data(nitOperador=nit, expediente=expediente, fechaInicial=fecha_inicial, fechaFinal=fecha_final)
+            # Buscar y descargar datos
+            ser_service.buscar_data(
+                nitOperador=nit,
+                expediente=expediente,
+                fechaInicial=fecha_inicial,
+                fechaFinal=fecha_final,
+            )
+
             ser_service.descargar_y_clasificar_furs_paginado(
                 nit=nit,
                 anio=anio,
@@ -374,7 +291,7 @@ def procesar_periodica(request: PeriodicaRequest):
                 trimestres=[trimestre],
             )
 
-            # Subir a GCS
+            # Subir a Storage
             uploaded_urls, gsutil_paths = storage_repo.upload_period_and_images_standalone(
                 base_download_path=ser_service.download_path,
                 seccion="ia",
@@ -401,13 +318,39 @@ def procesar_periodica(request: PeriodicaRequest):
                     "expediente_habilitado": "NO",
                 }
                 bq_repo.insert_upload_log(RpaFursLog(**log), ingestion_id=ingestion_id)
-                logs_generados_total.append(log)
-
-            ser_service.close_session()
+                print(f"✅ Log insertado en BigQuery para NIT {nit} | Exp {expediente}")
+                return log
 
         except Exception as e:
-            print(f"Error al procesar NIT {item.get('Identificacion')}: {e}")
-            continue
+            print(f"❌ Error al procesar NIT {item.get('Identificacion')}: {e}")
+            return None
+        finally:
+            try:
+                ser_service.close_session()
+            except Exception:
+                pass
 
-    return {"registros_procesados": len(logs_generados_total)}
+    # ============================================================
+    # Ejecución paralela (idéntico al formato del servicio original)
+    # ============================================================
+    MAX_WORKERS = 6
+    print(f"⚙️ Iniciando procesamiento paralelo con {MAX_WORKERS} workers...")
 
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futuros = {executor.submit(procesar_item, item): item for item in registros}
+        for futuro in as_completed(futuros):
+            resultado = futuro.result()
+            if resultado:
+                logs_generados_total.append(resultado)
+
+    print(f"🏁 Procesamiento completado. Total registros procesados: {len(logs_generados_total)}")
+
+    # Respuesta final coherente con el estilo original
+    return {
+        "summary": {
+            "registros_totales": len(registros),
+            "registros_procesados": len(logs_generados_total),
+            "registros_fallidos": len(registros) - len(logs_generados_total),
+        },
+        "detalle": logs_generados_total,
+    }

@@ -37,8 +37,8 @@ class Oficio:
 
 @dataclass
 class RpaFursLog:
-    sesion: Optional[str]
-    radicado: Optional[str]
+    # sesion: Optional[str]
+    # radicado: Optional[str]
     year: Optional[int]
     nitOperador: Optional[str]
     expediente: Optional[str]
@@ -46,8 +46,8 @@ class RpaFursLog:
     cod_seven: Optional[str]
     subido_a_storage: bool
     ingestion_timestamp: str
-    radicado_informe: Optional[str]
-    fecha_radicado_informe: Optional[str]
+    # radicado_informe: Optional[str]
+    # fecha_radicado_informe: Optional[str]
     servicio: Optional[str]
     codigo_servicio: Optional[int]
     expediente_habilitado: Optional[str]
@@ -219,7 +219,7 @@ class BigQueryRepository:
             "links_documentos": log_entry.links_documentos,
             "gsutil_log_documents": log_entry.gsutil_log_documents,
             "ingestion_timestamp": log_entry.ingestion_timestamp,
-            "codigo_seven": log_entry.cod_seven,
+            "cod_seven": log_entry.cod_seven,
             "codigo_servicio": log_entry.codigo_servicio,
             "servicio": log_entry.servicio,
             "expediente_habilitado": log_entry.expediente_habilitado,
@@ -256,7 +256,7 @@ class BigQueryRepository:
             PARTITION BY Identificacion, Expediente, Cod_Servicio, TRIMESTRE
             ORDER BY ANNO DESC
         ) = 1
-        LIMIT 10
+        LIMIT 100
         """
 
         job_config = bigquery.QueryJobConfig(
