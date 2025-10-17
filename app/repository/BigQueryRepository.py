@@ -37,8 +37,8 @@ class Oficio:
 
 @dataclass
 class RpaFursLog:
-    sesion: Optional[str]
-    radicado: Optional[str]
+    # sesion: Optional[str]
+    # radicado: Optional[str]
     year: Optional[int]
     nitOperador: Optional[str]
     expediente: Optional[str]
@@ -46,16 +46,16 @@ class RpaFursLog:
     cod_seven: Optional[str]
     subido_a_storage: bool
     ingestion_timestamp: str
-    radicado_informe: Optional[str]
-    fecha_radicado_informe: Optional[str]
+    # radicado_informe: Optional[str]
+    # fecha_radicado_informe: Optional[str]
     servicio: Optional[str]
     codigo_servicio: Optional[int]
     expediente_habilitado: Optional[str]
+    ingestion_timestamp_global: Optional[str] = None
     links_imagenes: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_images: Optional[List[str]] = field(default_factory=list)  # type: ignore
     links_documentos: Optional[List[str]] = field(default_factory=list)  # type: ignore
     gsutil_log_documents: Optional[List[str]] = field(default_factory=list)  # type: ignore
-
 
 class BigQueryRepository:
     """
@@ -202,15 +202,13 @@ class BigQueryRepository:
             print(f"Error al ejecutar la consulta en BigQuery: {e}")
             return []
 
-    def insert_upload_log(self, log_entry: RpaFursLog):
+    def insert_upload_log(self, log_entry: RpaFursLog, ingestion_id: Optional[str] = None):
         """
-        Inserta un registro de log en la tabla rpa_furs_logs de BigQuery.
+        Inserta un registro de log en la tabla rpa_furs_logs_ia de BigQuery.
         """
-        table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs"
+        table_id = "mintic-models-dev.SANCIONES_DIVIC_PRO.rpa_furs_logs_ia"
 
         row_to_insert = {
-            "sesion": log_entry.sesion,
-            "radicado": log_entry.radicado,
             "year": log_entry.year,
             "nitOperador": log_entry.nitOperador,
             "expediente": log_entry.expediente,
@@ -221,21 +219,58 @@ class BigQueryRepository:
             "links_documentos": log_entry.links_documentos,
             "gsutil_log_documents": log_entry.gsutil_log_documents,
             "ingestion_timestamp": log_entry.ingestion_timestamp,
-            "codigo_seven": log_entry.cod_seven,
-            "radicado_informe": log_entry.radicado_informe,
-            "fecha_radicado_informe": log_entry.fecha_radicado_informe,
+            "ingestion_timestamp_global": log_entry.ingestion_timestamp_global,
+            "cod_seven": log_entry.cod_seven,
             "codigo_servicio": log_entry.codigo_servicio,
             "servicio": log_entry.servicio,
             "expediente_habilitado": log_entry.expediente_habilitado,
+            "ingestion_id": ingestion_id or "manual",
         }
 
         try:
-            errors = self.bigquery_client.insert_rows_json(table_id, [row_to_insert])  # type: ignore
+            errors = self.bigquery_client.insert_rows_json(table_id, [row_to_insert])
             if not errors:
                 print(
-                    f"✅ Log para radicado {log_entry.radicado}, {log_entry.year}-T{log_entry.trimestre} insertado."
+                    f"✅ Log insertado para {log_entry.nitOperador}-{log_entry.expediente} "
+                    f"({log_entry.year}-T{log_entry.trimestre}) [ingestion_id={ingestion_id}]"
                 )
             else:
-                print(f"❌ Errores al insertar el log en BigQuery: {errors}")
+                print(f"❌ Errores al insertar el log: {errors}")
         except Exception as e:
             print(f"❌ Error crítico al insertar log en BigQuery: {e}")
+
+
+    def obtenerPeriodica(self, anno: int, trimestre: int):
+        query_sql = f"""
+        SELECT *
+        FROM (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY Identificacion, Expediente, Cod_Servicio
+                ) AS row_num
+            FROM
+                `mintic-models-dev.contraprestaciones_pro.EXPEDIENTES_BDU_PERIODICA`
+            WHERE
+                CAST(ANNO AS INT64) = @anno
+                AND CAST(TRIMESTRE AS INT64) = @trimestre
+        )
+        WHERE row_num = 1
+        LIMIT 21
+        """
+
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("anno", "INT64", anno),
+                bigquery.ScalarQueryParameter("trimestre", "INT64", trimestre),
+            ]
+        )
+
+        try:
+            query_job = self.bigquery_client.query(query_sql, job_config=job_config)
+            return [dict(row) for row in query_job.result()]
+        except GoogleCloudError as e:
+            print(f"⚠️ Error al consultar BigQuery: {e}")
+            return []
+
+

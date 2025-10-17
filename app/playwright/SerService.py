@@ -77,7 +77,7 @@ class SerService:
         self.page.locator("#Clave").fill(self.ser_password)  # type: ignore
 
         # tiempo de espera
-        self.page.wait_for_timeout(2000)
+        self.page.wait_for_timeout(15000)
 
         print("Saltándose la validación del CAPTCHA...")
         # Modificar la función ValidadCaptcha para que siempre retorne true
@@ -90,7 +90,7 @@ class SerService:
         try:
             # Espera hasta 30 segundos a que la URL contenga "/principal/index"
             print("Esperando la redirección después del login...")
-            self.page.wait_for_url("**/principal/index**", timeout=2000)
+            self.page.wait_for_url("**/principal/index**", timeout=15000)
 
             # Si la línea anterior tiene éxito, significa que el login fue correcto
             print("¡Sesión iniciada con éxito!")

@@ -9,7 +9,7 @@ info:
 servers:
   - url: http://localhost:8000
     description: Servidor de desarrollo local
-  - url: https://ser-furs-downloader-storage-service-120048616777.us-central1.run.app
+  - url: https://ser-furs-downloader-storage-service-ia-120048616777.us-central1.run.app
     description: Servidor de producción en Cloud Run
 
 tags:

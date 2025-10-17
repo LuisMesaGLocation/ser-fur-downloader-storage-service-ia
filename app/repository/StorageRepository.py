@@ -131,8 +131,6 @@ class StorageRepository:
                 except Exception as e:
                     print(f"  -> ERROR al subir el archivo {filename}: {e}")
 
-        print(f"--- Subida del directorio '{folder_to_upload}' completada. ---")
-
     def upload_period_and_images_standalone(
         self,
         base_download_path: str,
@@ -147,6 +145,7 @@ class StorageRepository:
         """
         Sube el contenido de una carpeta de período y devuelve las URLs públicas y las rutas GS.
         """
+        print(f"LOG Base_download_path:  '{base_download_path}'")
         period_folder_name = f"{periodo}T"
         period_path = os.path.join(
             base_download_path,

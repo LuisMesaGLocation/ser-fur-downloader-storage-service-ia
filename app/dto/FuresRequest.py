@@ -22,3 +22,8 @@ class FuresRequest(BaseModel):
     seccion: Optional[str] = None
     radicado: Optional[str] = None
     data: Optional[List[FuresDataItem]] = None
+
+class PeriodicaRequest(BaseModel):
+    token_ser: Optional[str] = None
+    anno: int
+    trimestre: int

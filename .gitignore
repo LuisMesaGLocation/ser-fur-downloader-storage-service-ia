@@ -3,3 +3,10 @@
 /descargas/
 # Byted-code compilado de Python
 __pycache__/
+
+# --- Entornos virtuales ---
+.venv/
+.venv*/
+venv/
+env/
+env*/
